@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}VLAN Management - IP/VLAN Manager{% endblock %}
+{% block page_title %}VLAN Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-network-wired"></i> VLANs
+        </h5>
+        <div>
+            <select class="form-select form-select-sm d-inline-block me-2" id="techFilter" style="width: auto;">
+                <option value="">All Technologies</option>
+            </select>
+            <select class="form-select form-select-sm d-inline-block me-2" id="statusFilter" style="width: auto;">
+                <option value="">All Status</option>
+                <option value="FREE">Free</option>
+                <option value="ASSIGNED">Assigned</option>
+            </select>
+            {% if current_user.is_admin() %}
+            <button class="btn btn-sm btn-outline-success" id="exportVlansBtn">
+                <i class="fas fa-file-excel"></i> Export Selected
+            </button>
+            <button class="btn btn-sm btn-danger" id="deleteVlansBtn" style="display: none;">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+            <button class="btn btn-sm btn-primary" id="addVlanBtn">
+                <i class="fas fa-plus"></i> Add VLAN
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <strong>Note:</strong> VLANs are pool-based. They are automatically assigned when creating sites based on technology type and vendor.
+        </div>
+        
+        <!-- VLAN Table -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        {% if current_user.is_admin() %}
+                        <th><input type="checkbox" id="selectAllVlans" title="Select All"></th>
+                        {% endif %}
+                        <th>Service VLAN</th>
+                        <th>OM VLAN</th>
+                        <th>Type</th>
+                        <th>Vendor</th>
+                    </tr>
+                </thead>
+                <tbody id="vlanTableBody"></tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be inserted here -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Add VLAN Modal -->
+<div class="modal fade" id="addVlanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add VLAN</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addVlanForm">
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="createVlanPair">
+                            <label class="form-check-label" for="createVlanPair">
+                                Make as VLAN Pair (Service + OM)
+                            </label>
+                        </div>
+                        <small class="text-muted">When creating pairs, you can use ranges. Service and OM ranges must have the same number of VLANs.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Service VLAN ID or Range *</label>
+                        <input type="text" class="form-control" id="vlanId" required placeholder="e.g., 200 or 10-15">
+                        <small class="text-muted">Enter a single VLAN ID (1-4095) or a range like 10-15.</small>
+                    </div>
+                    <div id="omVlanFields" style="display: none;">
+                        <div class="mb-3">
+                            <label class="form-label">OM VLAN ID or Range *</label>
+                            <input type="text" class="form-control" id="omVlanId" placeholder="e.g., 201 or 20-25">
+                            <small class="text-muted">Enter a single VLAN ID or range matching the service VLAN count (e.g., if service is 10-15, OM should be 20-25).</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Technology Type *</label>
+                        <select class="form-select" id="vlanTechnology" required>
+                            <option value="">Select Technology</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Vendor *</label>
+                        <select class="form-select" id="vlanVendor" required>
+                            <option value="">Select Vendor</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAddVlan">Add VLAN</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/vlans.js') }}"></script>
+{% endblock %}

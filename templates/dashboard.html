@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - IP/VLAN Manager{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}High-level insights across routers, IPs, VLANs, and sites{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Router Statistics -->
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+        <div class="stat-card gradient-primary">
+            <div class="stat-meta">
+                <span class="stat-label">Total Routers</span>
+                <span class="stat-value">{{ total_routers }}</span>
+            </div>
+            <div class="stat-icon">
+                <i class="fas fa-router"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Site Statistics -->
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+        <div class="stat-card gradient-success">
+            <div class="stat-meta">
+                <span class="stat-label">Total Sites</span>
+                <span class="stat-value">{{ total_sites }}</span>
+            </div>
+            <div class="stat-icon">
+                <i class="fas fa-building"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- IP Statistics -->
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+        <div class="stat-card gradient-warning">
+            <div class="stat-meta">
+                <span class="stat-label">Assigned IPs</span>
+                <span class="stat-value">{{ assigned_ips }}/{{ total_ips }}</span>
+            </div>
+            <div class="stat-icon">
+                <i class="fas fa-server"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Free IPs -->
+    <div class="col-sm-6 col-lg-4 col-xl-3">
+        <div class="stat-card gradient-neutral">
+            <div class="stat-meta">
+                <span class="stat-label">Free IPs</span>
+                <span class="stat-value">{{ free_ips }}</span>
+            </div>
+            <div class="stat-icon">
+                <i class="fas fa-circle"></i>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="row g-4 mt-1">
+    <!-- Site Statistics by Technology -->
+    <div class="col-md-6 col-xl-6">
+        <div class="card glass-card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                    <i class="fas fa-chart-bar text-primary"></i>
+                    Sites by Technology
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="siteTechChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- IP Statistics by Technology -->
+    <div class="col-md-6 col-xl-6">
+        <div class="card glass-card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                    <i class="fas fa-chart-bar text-info"></i>
+                    IP Statistics by Technology
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="ipTechChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Recent Activities -->
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="card glass-card">
+            <div class="card-header">
+                <h5 class="card-title mb-0 d-flex align-items-center gap-2">
+                    <i class="fas fa-history text-warning"></i>
+                    Recent Activities
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Resource</th>
+                                <th>Site</th>
+                                <th>Router</th>
+                                <th>Interface</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for activity in recent_activities %}
+                            <tr>
+                                <td>{{ activity.timestamp.strftime('%Y-%m-%d %H:%M:%S') if activity.timestamp else 'N/A' }}</td>
+                                <td>{{ activity.user_username }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if 'assign' in activity.action or 'create' in activity.action else 'warning' }}">
+                                        {{ activity.action.replace('_', ' ').title() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info text-dark">{{ activity.resource_type.upper() }}</span>
+                                    {{ activity.resource_value }}
+                                </td>
+                                <td>{{ activity.site_name or 'N/A' }}</td>
+                                <td>{{ activity.router or 'N/A' }}</td>
+                                <td>{{ activity.interface or 'N/A' }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">No activities found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Site Statistics by Technology Chart
+    const siteTechData = {{ site_stats_by_tech | tojson }};
+    const siteTechLabels = Object.keys(siteTechData);
+    const siteTechValues = siteTechLabels.map(tech => siteTechData[tech]);
+    
+    new Chart(document.getElementById('siteTechChart'), {
+        type: 'bar',
+        data: {
+            labels: siteTechLabels,
+            datasets: [{
+                label: 'Sites',
+                data: siteTechValues,
+                backgroundColor: 'rgba(40, 167, 69, 0.8)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // IP Statistics by Technology Chart
+    const ipTechData = {{ ip_stats_by_tech | tojson }};
+    const ipTechLabels = Object.keys(ipTechData);
+    const ipTechAssigned = ipTechLabels.map(tech => ipTechData[tech].assigned);
+    const ipTechFree = ipTechLabels.map(tech => ipTechData[tech].free);
+    
+    new Chart(document.getElementById('ipTechChart'), {
+        type: 'bar',
+        data: {
+            labels: ipTechLabels,
+            datasets: [
+                {
+                    label: 'Assigned',
+                    data: ipTechAssigned,
+                    backgroundColor: 'rgba(40, 167, 69, 0.8)'
+                },
+                {
+                    label: 'Free',
+                    data: ipTechFree,
+                    backgroundColor: 'rgba(23, 162, 184, 0.8)'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // Removed VLAN chart
+</script>
+{% endblock %}

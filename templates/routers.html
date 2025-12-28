@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Router Management - IP/VLAN Manager{% endblock %}
+{% block page_title %}Router Management{% endblock %}
+{% block page_subtitle %}Keep your core routing devices organized and up to date{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-router"></i> Routers
+        </h5>
+        {% if current_user.is_admin() %}
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-success" id="exportRoutersBtn">
+                <i class="fas fa-file-excel"></i> Export Selected
+            </button>
+            
+            <button class="btn btn-sm btn-danger" id="deleteRoutersBtn" style="display: none;">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+            <button class="btn btn-sm btn-primary" id="addRouterBtn">
+                <i class="fas fa-plus"></i> Add Router
+            </button>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        {% if current_user.is_admin() %}
+                        <th><input type="checkbox" id="selectAllRouters" title="Select All"></th>
+                        {% endif %}
+                        <th>Name</th>
+                        <th>Router IP</th>
+                        <th>Router Type</th>
+                        <th>Interfaces</th>
+                    </tr>
+                </thead>
+                <tbody id="routerTableBody"></tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be inserted here -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Add Router Modal -->
+<div class="modal fade" id="addRouterModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Router</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addRouterForm">
+                    <div class="mb-3">
+                        <label class="form-label">Router Name *</label>
+                        <input type="text" class="form-control" id="routerName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Router IP *</label>
+                        <input type="text" class="form-control" id="routerIp" required placeholder="e.g., 192.168.1.1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Router Type *</label>
+                        <input type="text" class="form-control" id="routerType" required placeholder="e.g., Cisco, Huawei, Juniper">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="routerDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAddRouter">Add Router</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/routers.js') }}"></script>
+{% endblock %}
+

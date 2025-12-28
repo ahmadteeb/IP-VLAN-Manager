@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Interface Management - IP/VLAN Manager{% endblock %}
+{% block page_title %}Interface Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-plug"></i> Interfaces
+        </h5>
+        <div>
+            <select class="form-select form-select-sm d-inline-block" id="routerFilter" style="width: auto;">
+                <option value="">All Routers</option>
+            </select>
+            {% if current_user.is_admin() %}
+            <button class="btn btn-sm btn-outline-success" id="exportInterfacesBtn">
+                <i class="fas fa-file-excel"></i> Export Selected
+            </button>
+            <button class="btn btn-sm btn-danger" id="deleteInterfacesBtn" style="display: none;">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+            <button class="btn btn-sm btn-primary" id="addInterfaceBtn">
+                <i class="fas fa-plus"></i> Add Interface
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        {% if current_user.is_admin() %}
+                        <th><input type="checkbox" id="selectAllInterfaces" title="Select All"></th>
+                        {% endif %}
+                        <th>Router</th>
+                        <th>Interface Name</th>
+                    </tr>
+                </thead>
+                <tbody id="interfaceTableBody"></tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be inserted here -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Add Interface Modal -->
+<div class="modal fade" id="addInterfaceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Interface</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addInterfaceForm">
+                    <div class="mb-3">
+                        <label class="form-label">Router *</label>
+                        <select class="form-select" id="interfaceRouter" required>
+                            <option value="">Select Router</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Interface Name *</label>
+                        <input type="text" class="form-control" id="interfaceName" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAddInterface">Add Interface</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/interfaces.js') }}"></script>
+{% endblock %}
+

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Vendor Management - IP/VLAN Manager{% endblock %}
+{% block page_title %}Vendor Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-building"></i> Vendors
+        </h5>
+        <div>
+            {% if current_user.is_admin() %}
+            <button class="btn btn-sm btn-outline-success" id="exportVendorsBtn">
+                <i class="fas fa-file-excel"></i> Export Selected
+            </button>
+            <button class="btn btn-sm btn-danger" id="deleteVendorsBtn" style="display: none;">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+            <button class="btn btn-sm btn-info" id="editVendorsBtn" style="display: none;">
+                <i class="fas fa-edit"></i> Edit Selected
+            </button>
+            <button class="btn btn-sm btn-primary" id="addVendorBtn">
+                <i class="fas fa-plus"></i> Add Vendor
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        {% if current_user.is_authenticated and current_user.is_admin() %}
+                        <th><input type="checkbox" id="selectAllVendors" title="Select All"></th>
+                        {% endif %}
+                        <th>ID</th>
+                        <th>Vendor Name</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody id="vendorTableBody"></tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be inserted here -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Add Vendor Modal -->
+<div class="modal fade" id="addVendorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Vendor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addVendorForm">
+                    <div class="mb-3">
+                        <label class="form-label">Vendor Name *</label>
+                        <input type="text" class="form-control" id="vendorName" required placeholder="e.g., Huawei, Ericsson, Nokia">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAddVendor">Add Vendor</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Vendor Modal -->
+<div class="modal fade" id="editVendorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Vendor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editVendorForm">
+                    <input type="hidden" id="editVendorId">
+                    <div class="mb-3">
+                        <label class="form-label">Vendor Name *</label>
+                        <input type="text" class="form-control" id="editVendorName" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmEditVendor">Update Vendor</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/vendors.js') }}"></script>
+{% endblock %}
+

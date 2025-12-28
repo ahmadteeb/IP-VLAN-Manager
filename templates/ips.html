@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}IP Management - IP/VLAN Manager{% endblock %}
+{% block page_title %}IP Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-server"></i> IP Addresses
+        </h5>
+        <div>
+            {% if current_user.is_admin() %}
+            
+            <button class="btn btn-sm btn-outline-success" id="exportIpsBtn">
+                <i class="fas fa-file-excel"></i> Export Selected
+            </button>
+            <button class="btn btn-sm btn-danger" id="deleteIpsBtn" style="display: none;">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+            <button class="btn btn-sm btn-primary" id="addIpBtn">
+                <i class="fas fa-plus"></i> Add IP
+            </button>
+            
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <strong>Note:</strong> IPs are automatically assigned when creating sites. You can add new IP addresses to the pool.
+        </div>
+        
+        <!-- Filters -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <input type="text" class="form-control" id="searchInput" placeholder="Search gateway...">
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="techFilter">
+                    <option value="">All Technologies</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control" id="vendorFilter" placeholder="Vendor">
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="statusFilter">
+                    <option value="">All Status</option>
+                    <option value="FREE">Free</option>
+                    <option value="ASSIGNED">Assigned</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-secondary w-100" id="clearFilters" title="Clear Filters">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- IP Table -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        {% if current_user.is_admin() %}
+                        <th><input type="checkbox" id="selectAllIps" title="Select All"></th>
+                        {% endif %}
+                        <th>Service GW IP</th>
+                        <th>Service Subnet Mask</th>
+                        <th>OM GW IP</th>
+                        <th>OM Subnet Mask</th>
+                        <th>Type</th>
+                        <th>Vendor</th>
+                        <th>Status</th>
+                        <th>Site Name</th>
+                    </tr>
+                </thead>
+                <tbody id="ipTableBody"></tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="pagination">
+                <!-- Pagination will be inserted here -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Add IP Modal -->
+<div class="modal fade" id="addIpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Gateway</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addIpForm">
+                    <div class="mb-3">
+                        <label class="form-label">Add Method *</label>
+                        <select class="form-select" id="addMethod" required>
+                            <option value="single">Single IP Address</option>
+                            <option value="subnet">Subnet (Auto-generate all IPs)</option>
+                            <option value="subnetting">Subnetting Calculator (Divide & Generate)</option>
+                        </select>
+                    </div>
+                    <div id="singleIpFields">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="createIpPair">
+                                <label class="form-check-label" for="createIpPair">
+                                    Make as IP Pair (Service + OM)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Service Gateway IP *</label>
+                            <input type="text" class="form-control" id="ipAddress" required placeholder="e.g., 192.168.1.1">
+                        </div>
+                        <div id="omIpFields" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">OM Gateway IP *</label>
+                                <input type="text" class="form-control" id="omIpAddress" placeholder="e.g., 192.168.1.2">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Subnet Mask</label>
+                            <input type="text" class="form-control" id="ipSubnetMask" placeholder="e.g., 255.255.255.0">
+                        </div>
+                    </div>
+                    <div id="subnetFields" style="display: none;">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="createSubnetPair">
+                                <label class="form-check-label" for="createSubnetPair">
+                                    Make as IP Pair (Service + OM)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Service Subnet (CIDR) *</label>
+                            <input type="text" class="form-control" id="ipSubnet" placeholder="e.g., 192.168.1.0/24">
+                            <small class="text-muted">Enter subnet in CIDR notation (e.g., 192.168.1.0/24). All usable host IPs in the subnet will be automatically generated (network and broadcast addresses excluded).</small>
+                        </div>
+                        <div id="omSubnetFields" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">OM Subnet (CIDR) *</label>
+                                <input type="text" class="form-control" id="omIpSubnet" placeholder="e.g., 192.168.2.0/24">
+                                <small class="text-muted">Enter OM subnet in CIDR notation. Must generate the same number of IPs as the service subnet.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="subnettingFields" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Subnetting Calculator:</strong> Enter a base subnet and specify how many subnets you want. 
+                            The system will divide the subnet and automatically generate all IPs from all resulting subnets.
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="createSubnettingPair">
+                                <label class="form-check-label" for="createSubnettingPair">
+                                    Make as IP Pair (Service + OM)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Service Base Subnet (CIDR) *</label>
+                            <input type="text" class="form-control" id="baseSubnet" placeholder="e.g., 192.168.1.0/24">
+                            <small class="text-muted">Enter the original subnet you want to divide (e.g., 192.168.1.0/24)</small>
+                        </div>
+                        <div id="omSubnettingFields" style="display: none;">
+                            <div class="mb-3">
+                                <label class="form-label">OM Base Subnet (CIDR) *</label>
+                                <input type="text" class="form-control" id="omBaseSubnet" placeholder="e.g., 192.168.2.0/24">
+                                <small class="text-muted">Enter the OM base subnet to divide. Must be divided into the same number of subnets as the service subnet.</small>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Number of Subnets *</label>
+                            <input type="number" class="form-control" id="numSubnets" min="2" placeholder="e.g., 30">
+                            <small class="text-muted">How many subnets do you want to create? (minimum 2)</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Technology *</label>
+                        <select class="form-select" id="ipTechnology" required>
+                            <option value="">Select Technology</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Vendor *</label>
+                        <select class="form-select" id="ipVendor" required>
+                            <option value="">Select Vendor</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAddIp">Add IP</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/ips.js') }}"></script>
+{% endblock %}
