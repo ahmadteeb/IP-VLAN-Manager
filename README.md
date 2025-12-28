@@ -84,7 +84,7 @@ A comprehensive web-based network management system for managing IP addresses, V
 
 1. **Clone the repository** (or navigate to the project directory):
 ```bash
-cd "IP-VLAN Manager"
+cd "IP-VLAN-Manager"
 ```
 
 2. **Install dependencies**:
