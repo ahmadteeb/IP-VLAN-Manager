@@ -122,7 +122,7 @@ function renderRoutersTable(routers) {
 function exportSelectedRouters() {
     const selectedIds = Array.from(selectedRouterIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one router to export', 'error');
+        showToast('Warning', 'Please select at least one router to export', 'warning');
         return;
     }
     const list = (window._routersPage || []).filter(r => selectedIds.includes(r.id));
@@ -170,7 +170,7 @@ function updateSelectAllCheckbox() {
 async function deleteSelectedRouters() {
     const selectedIds = Array.from(selectedRouterIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one router to delete', 'error');
+        showToast('Warning', 'Please select at least one router to delete', 'warning');
         return;
     }
     

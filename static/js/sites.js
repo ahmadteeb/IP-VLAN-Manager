@@ -283,7 +283,7 @@ function escapeHtml(text) {
 function exportSelectedSites() {
     const selectedIds = Array.from(selectedSiteIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one site to export', 'error');
+        showToast('Warning', 'Please select at least one site to export', 'warning');
         return;
     }
     const list = (window._sitesPage || []).filter(s => selectedIds.includes(s.id));
@@ -311,7 +311,7 @@ function exportSelectedSites() {
 async function generateConfigForSelectedSites() {
     const selectedIds = getSelectedSiteIds();
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one site to generate configuration', 'error');
+        showToast('Warning', 'Please select at least one site to generate configuration', 'warning');
         return;
     }
 

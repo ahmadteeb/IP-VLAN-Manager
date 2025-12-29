@@ -145,7 +145,7 @@ function renderInterfacesTable(interfaces) {
 function exportSelectedInterfaces() {
     const selectedIds = Array.from(selectedInterfaceIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one interface to export', 'error');
+        showToast('Warning', 'Please select at least one interface to export', 'warning');
         return;
     }
     const list = (window._interfacesPage || []).filter(i => selectedIds.includes(i.id));
@@ -191,7 +191,7 @@ function updateSelectAllCheckbox() {
 async function deleteSelectedInterfaces() {
     const selectedIds = Array.from(selectedInterfaceIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one interface to delete', 'error');
+        showToast('Warning', 'Please select at least one interface to delete', 'warning');
         return;
     }
     

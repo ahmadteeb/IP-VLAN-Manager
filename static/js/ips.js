@@ -307,7 +307,7 @@ function renderIPsTable(ips) {
 function exportSelectedIps() {
     const selectedIds = Array.from(selectedIpIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one IP to export', 'error');
+        showToast('Warning', 'Please select at least one IP to export', 'warning');
         return;
     }
     const list = (window._ipsPage || []).filter(ip => selectedIds.includes(ip.id));
@@ -358,7 +358,7 @@ function updateSelectAllCheckbox() {
 async function deleteSelectedIPs() {
     const selectedIds = Array.from(selectedIpIds);
     if (selectedIds.length === 0) {
-        showToast('Error', 'Please select at least one IP to delete', 'error');
+        showToast('Warning', 'Please select at least one IP to delete', 'warning');
         return;
     }
     
