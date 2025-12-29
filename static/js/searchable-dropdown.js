@@ -96,6 +96,47 @@
 
         let isOpen = false;
         let filteredOptions = [];
+        let fetchTimeout = null;
+        let isFetching = false;
+
+        // Map select IDs to API endpoints
+        function getApiEndpoint(selectId) {
+            const idLower = selectId.toLowerCase();
+            if (idLower.includes('vendor')) {
+                return '/api/vendors';
+            } else if (idLower.includes('router')) {
+                return '/api/routers';
+            } else if (idLower.includes('interface')) {
+                return '/api/interfaces';
+            } else if (idLower.includes('technology')) {
+                return '/api/technologies';
+            }
+            return null;
+        }
+
+        // Get the property name for the data array in API response
+        function getDataPropertyName(selectId) {
+            const idLower = selectId.toLowerCase();
+            if (idLower.includes('vendor')) {
+                return 'vendors';
+            } else if (idLower.includes('router')) {
+                return 'routers';
+            } else if (idLower.includes('interface')) {
+                return 'interfaces';
+            } else if (idLower.includes('technology')) {
+                return 'technologies';
+            }
+            return null;
+        }
+
+        // Get the display field name for the option text
+        function getDisplayField(selectId) {
+            const idLower = selectId.toLowerCase();
+            if (idLower.includes('vendor') || idLower.includes('router') || idLower.includes('interface') || idLower.includes('technology')) {
+                return 'name';
+            }
+            return 'name';
+        }
 
         function updateDisplay() {
             const selectedOption = selectElement.options[selectElement.selectedIndex];
@@ -148,22 +189,125 @@
             });
         }
 
+        async function fetchDataFromApi(searchTerm) {
+            const apiEndpoint = getApiEndpoint(selectElement.id);
+            const dataProperty = getDataPropertyName(selectElement.id);
+            const displayField = getDisplayField(selectElement.id);
+
+            if (!apiEndpoint || !dataProperty || isFetching) {
+                return;
+            }
+
+            isFetching = true;
+            try {
+                console.log(`[SearchableDropdown] Fetching data from ${apiEndpoint} with search term: "${searchTerm}"`);
+                
+                const url = `${apiEndpoint}?search=${encodeURIComponent(searchTerm)}&per_page=100`;
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                const items = data[dataProperty] || [];
+
+                console.log(`[SearchableDropdown] Received ${items.length} items from API`);
+
+                if (items.length > 0) {
+                    // Store current selected value
+                    const currentValue = selectElement.value;
+                    
+                    // Clear existing options except placeholder
+                    const placeholderOption = selectElement.options[0];
+                    const placeholderText = placeholderOption && placeholderOption.value === '' ? placeholderOption.text : 'Select...';
+                    
+                    selectElement.innerHTML = '';
+                    if (placeholderText !== 'Select...' || placeholderOption) {
+                        const placeholder = document.createElement('option');
+                        placeholder.value = '';
+                        placeholder.textContent = placeholderText;
+                        selectElement.appendChild(placeholder);
+                    }
+
+                    // Add new options from API
+                    items.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item.id;
+                        option.textContent = item[displayField] || item.name || String(item.id);
+                        selectElement.appendChild(option);
+                    });
+
+                    // Restore selected value if it still exists
+                    if (currentValue) {
+                        const optionExists = Array.from(selectElement.options).some(opt => opt.value === currentValue);
+                        if (optionExists) {
+                            selectElement.value = currentValue;
+                        }
+                    }
+
+                    // Rebuild dropdown options
+                    buildOptions();
+                    
+                    // Re-filter with current search term
+                    filterOptions(searchTerm);
+                } else {
+                    console.log(`[SearchableDropdown] No items found for search term: "${searchTerm}"`);
+                    // Show "No results" message
+                    dropdownMenu.innerHTML = '<div class="searchable-dropdown-option" style="padding: 0.5rem 0.75rem; color: #6c757d; text-align: center;">No results found</div>';
+                }
+            } catch (error) {
+                console.error(`[SearchableDropdown] Error fetching data from API:`, error);
+            } finally {
+                isFetching = false;
+            }
+        }
+
         function filterOptions(searchTerm) {
             const term = searchTerm.toLowerCase().trim();
+            let visibleCount = 0;
+
             filteredOptions.forEach(option => {
                 const text = option.textContent.toLowerCase();
                 if (text.includes(term)) {
                     option.style.display = '';
+                    visibleCount++;
                 } else {
                     option.style.display = 'none';
                 }
             });
+
+            // If no visible options and search term is not empty, fetch from API
+            if (visibleCount === 0 && term.length > 0) {
+                // Clear existing timeout
+                if (fetchTimeout) {
+                    clearTimeout(fetchTimeout);
+                }
+
+                // Debounce API call to avoid too many requests
+                fetchTimeout = setTimeout(() => {
+                    fetchDataFromApi(searchTerm);
+                }, 500); // Wait 500ms after user stops typing
+            } else {
+                // Clear timeout if we have matches
+                if (fetchTimeout) {
+                    clearTimeout(fetchTimeout);
+                    fetchTimeout = null;
+                }
+            }
 
             // Highlight first visible option
             const firstVisible = Array.from(filteredOptions).find(opt => opt.style.display !== 'none');
             if (firstVisible) {
                 filteredOptions.forEach(opt => opt.classList.remove('hover'));
                 firstVisible.classList.add('hover');
+            } else if (visibleCount === 0 && term.length > 0) {
+                // Show loading message while fetching
+                dropdownMenu.innerHTML = '<div class="searchable-dropdown-option" style="padding: 0.5rem 0.75rem; color: #6c757d; text-align: center;">Searching...</div>';
             }
         }
 
@@ -192,6 +336,12 @@
             customSelect.classList.remove('active');
             searchInput.value = '';
             filteredOptions = [];
+            
+            // Clear any pending fetch timeout
+            if (fetchTimeout) {
+                clearTimeout(fetchTimeout);
+                fetchTimeout = null;
+            }
         }
 
         // Event listeners

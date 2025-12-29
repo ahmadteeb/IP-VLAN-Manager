@@ -194,8 +194,17 @@ def dashboard():
 def api_get_technologies():
     """Return list of technologies from DB."""
     try:
-        technologies = Technology.query.order_by(Technology.id.asc()).all()
-        return jsonify({'technologies': [t.to_dict() for t in technologies]})
+        search = request.args.get('search', "", type=str)
+        query = Technology.query.order_by(Technology.id.asc())
+        
+        if search:
+            query = query.filter(Technology.name.like(f'%{search}%'))
+        
+        technologies = query.all()
+        return jsonify({
+            'technologies': [t.to_dict() for t in technologies],
+            'search': search
+        })
     except Exception as e:
         app.logger.error(f'Error fetching technologies: {str(e)}', exc_info=True)
         return jsonify({'error': 'Failed to load technologies'}), 500
@@ -374,11 +383,15 @@ def api_get_interfaces():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
     router_id = request.args.get('router_id', type=int)
+    search = request.args.get('search', "", type=str)
     
     query = Interface.query
     
     if router_id:
         query = query.filter_by(router_id=router_id)
+    
+    if search:
+        query = query.filter(Interface.name.like(f'%{search}%'))
     
     query = query.order_by(Interface.name)
     
@@ -390,7 +403,8 @@ def api_get_interfaces():
         'interfaces': [i.to_dict() for i in pagination.items],
         'total': pagination.total,
         'pages': pagination.pages,
-        'current_page': page
+        'current_page': page,
+        'search': search
     })
 
 @app.route('/api/interfaces', methods=['POST'])
@@ -1352,8 +1366,11 @@ def api_get_vendors():
     """Get vendors with pagination"""
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
+    search = request.args.get('search', "", type=str)
     
     query = Vendor.query.order_by(Vendor.name)
+    if search:
+        query = query.filter(Vendor.name.like(f'%{search}%'))
     
     pagination = query.paginate(
         page=page, per_page=per_page, error_out=False
@@ -1363,7 +1380,8 @@ def api_get_vendors():
         'vendors': [v.to_dict() for v in pagination.items],
         'total': pagination.total,
         'pages': pagination.pages,
-        'current_page': page
+        'current_page': page,
+        'search': search
     })
 
 @app.route('/api/vendors', methods=['POST'])
