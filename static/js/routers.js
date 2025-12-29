@@ -48,6 +48,11 @@ function setupEventListeners() {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', deleteSelectedRouters);
     }
+
+    document.getElementById('searchInput').addEventListener('input', debounce(function() {
+        currentPage = 1;
+        loadRouters();
+    }, 500));
     
     // Select all checkbox
     const selectAll = document.getElementById('selectAllRouters');
@@ -72,6 +77,10 @@ async function loadRouters() {
         page: currentPage,
         per_page: perPage
     });
+    
+    const search = document.getElementById('searchInput').value;
+    
+    if (search) params.append('search', search);
     
     try {
         const data = await apiRequest(`/api/routers?${params}`);

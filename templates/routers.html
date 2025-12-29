@@ -12,6 +12,7 @@
         </h5>
         {% if current_user.is_admin() %}
         <div class="d-flex align-items-center gap-2">
+            <input type="text" class="form-control form-control-sm d-inline-block me-2" id="searchInput" placeholder="Search..." style="width: 200px;">
             <button class="btn btn-sm btn-outline-success" id="exportRoutersBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
