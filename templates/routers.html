@@ -10,21 +10,21 @@
         <h5 class="card-title mb-0">
             <i class="fas fa-router"></i> Routers
         </h5>
-        {% if current_user.is_admin() %}
         <div class="d-flex align-items-center gap-2">
             <input type="text" class="form-control form-control-sm d-inline-block me-2" id="searchInput" placeholder="Search..." style="width: 200px;">
+            
+            {% if current_user.is_admin() %}
             <button class="btn btn-sm btn-outline-success" id="exportRoutersBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
-            
             <button class="btn btn-sm btn-danger" id="deleteRoutersBtn" style="display: none;">
                 <i class="fas fa-trash"></i> Delete Selected
             </button>
             <button class="btn btn-sm btn-primary" id="addRouterBtn">
                 <i class="fas fa-plus"></i> Add Router
             </button>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
     <div class="card-body">
         <div class="table-responsive">

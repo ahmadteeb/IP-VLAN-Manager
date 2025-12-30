@@ -50,10 +50,10 @@
             <li><a href="{{ url_for('sites') }}" class="{% if request.endpoint == 'sites' %}active{% endif %}" title="Sites">
                 <i class="fas fa-building"></i> <span>Sites</span>
             </a></li>
-            {% if current_user.is_authenticated and not current_user.is_read_only() %}
             <li><a href="{{ url_for('routers') }}" class="{% if request.endpoint == 'routers' %}active{% endif %}" title="Routers">
                 <i class="fas fa-network-wired"></i> <span>Routers</span>
             </a></li>
+            {% if current_user.is_authenticated and not current_user.is_read_only() %}
             <li><a href="{{ url_for('interfaces') }}" class="{% if request.endpoint == 'interfaces' %}active{% endif %}" title="Interfaces">
                 <i class="fas fa-plug"></i> <span>Interfaces</span>
             </a></li>
