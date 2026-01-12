@@ -94,7 +94,7 @@ function setupEventListeners() {
 
 async function loadTechnologiesForVlansPage() {
     try {
-        const data = await apiRequest('/api/technologies');
+        const data = await apiRequest(window.API_URLS.technologies);
         const techs = data.technologies || [];
         const filter = document.getElementById('techFilter');
         if (filter) {
@@ -127,7 +127,7 @@ async function loadVLANs() {
     if (status) params.append('status', status);
     
     try {
-        const data = await apiRequest(`/api/vlans?${params}`);
+        const data = await apiRequest(`${window.API_URLS.vlans}?${params}`);
         window._vlansPage = data.vlans || [];
         renderVLANsTable(data.vlans);
         renderPagination(data.total, data.pages, data.current_page);
@@ -259,7 +259,7 @@ async function deleteSelectedVLANs() {
     
     try {
         for (const vlanId of selectedIds) {
-            await apiRequest(`/api/vlans/${vlanId}`, {
+            await apiRequest(window.API_URLS.deleteVlan(vlanId), {
                 method: 'DELETE'
             });
         }
@@ -313,7 +313,7 @@ function changePage(page) {
 
 async function loadVendorsForSelect() {
     try {
-        const data = await apiRequest('/api/vendors');
+        const data = await apiRequest(window.API_URLS.vendors);
         const select = document.getElementById('vlanVendor');
         select.innerHTML = '<option value="">Select Vendor</option>' + 
             data.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
@@ -458,7 +458,7 @@ async function addVLAN() {
             requestData.om_vlan_id = omVlanIdInput.includes('-') ? omVlanIdInput : parseInt(omVlanIdInput, 10);
         }
         
-        await apiRequest('/api/vlans', {
+        await apiRequest(window.API_URLS.createVlan, {
             method: 'POST',
             body: JSON.stringify(requestData)
         });

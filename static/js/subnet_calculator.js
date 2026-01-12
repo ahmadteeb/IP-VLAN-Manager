@@ -35,7 +35,7 @@ async function calculateSubnets() {
     }
     
     try {
-        const response = await apiRequest('/api/subnet-calculator', {
+        const response = await apiRequest(window.API_URLS.subnetCalculator, {
             method: 'POST',
             body: JSON.stringify({
                 base_subnet: baseSubnet,

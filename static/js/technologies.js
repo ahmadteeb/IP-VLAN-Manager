@@ -37,7 +37,7 @@ function setupTechEvents() {
 
 async function loadTechnologies() {
     try {
-        const data = await apiRequest('/api/technologies');
+        const data = await apiRequest(window.API_URLS.technologies);
         renderTechTable(data.technologies || []);
     } catch (error) {
         showToast('Error', error.message, 'error');
@@ -105,13 +105,13 @@ async function saveTechnology() {
 
     try {
         if (id) {
-            await apiRequest(`/api/technologies/${parseInt(id,10)}`, {
+            await apiRequest(window.API_URLS.updateTechnology(parseInt(id,10)), {
                 method: 'PUT',
                 body: JSON.stringify({ name })
             });
             showToast('Success', 'Technology updated', 'success');
         } else {
-            await apiRequest('/api/technologies', {
+            await apiRequest(window.API_URLS.createTechnology, {
                 method: 'POST',
                 body: JSON.stringify({ name })
             });
@@ -134,7 +134,7 @@ async function deleteTechnology(id) {
     });
     if (!confirmed) return;
     try {
-        await apiRequest(`/api/technologies/${id}`, { method: 'DELETE' });
+        await apiRequest(window.API_URLS.deleteTechnology(id), { method: 'DELETE' });
         showToast('Success', 'Technology deleted', 'success');
         loadTechnologies();
     } catch (error) {
@@ -156,7 +156,7 @@ async function deleteSelectedTechnologies() {
     try {
         // No bulk endpoint; delete sequentially
         for (const id of ids) {
-            await apiRequest(`/api/technologies/${id}`, { method: 'DELETE' });
+            await apiRequest(window.API_URLS.deleteTechnology(id), { method: 'DELETE' });
         }
         selectedTechIds.clear();
         showToast('Success', `Deleted ${ids.length} item(s)`, 'success');

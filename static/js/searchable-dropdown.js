@@ -101,15 +101,18 @@
 
         // Map select IDs to API endpoints
         function getApiEndpoint(selectId) {
+            if (!window.API_URLS) {
+                return null;
+            }
             const idLower = selectId.toLowerCase();
             if (idLower.includes('vendor')) {
-                return '/api/vendors';
+                return window.API_URLS.vendors;
             } else if (idLower.includes('router')) {
-                return '/api/routers';
+                return window.API_URLS.routers;
             } else if (idLower.includes('interface')) {
-                return '/api/interfaces';
+                return window.API_URLS.interfaces;
             } else if (idLower.includes('technology')) {
-                return '/api/technologies';
+                return window.API_URLS.technologies;
             }
             return null;
         }

@@ -3012,6 +3012,9 @@ def init_db():
             except Exception as e:
                 app.logger.error(f'Error creating password state for default admin: {str(e)}', exc_info=True)
 
+
+
+
 if __name__ == '__main__':
     init_db()
 

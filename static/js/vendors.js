@@ -69,7 +69,7 @@ async function loadVendors() {
     });
     
     try {
-        const data = await apiRequest(`/api/vendors?${params}`);
+        const data = await apiRequest(`${window.API_URLS.vendors}?${params}`);
         window._vendorsPage = data.vendors || [];
         renderVendorsTable(data.vendors);
         renderPagination(data.total, data.pages, data.current_page);
@@ -197,7 +197,7 @@ async function deleteSelectedVendors() {
     
     try {
         for (const vendorId of selectedIds) {
-            await apiRequest(`/api/vendors/${vendorId}`, {
+            await apiRequest(window.API_URLS.deleteVendor(vendorId), {
                 method: 'DELETE'
             });
         }
@@ -262,7 +262,7 @@ async function addVendor() {
     }
     
     try {
-        await apiRequest('/api/vendors', {
+        await apiRequest(window.API_URLS.createVendor, {
             method: 'POST',
             body: JSON.stringify({
                 name: name
@@ -296,7 +296,7 @@ async function updateVendor() {
     }
     
     try {
-        await apiRequest(`/api/vendors/${vendorId}`, {
+        await apiRequest(window.API_URLS.updateVendor(vendorId), {
             method: 'PUT',
             body: JSON.stringify({
                 name: name

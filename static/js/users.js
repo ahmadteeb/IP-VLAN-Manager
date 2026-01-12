@@ -43,7 +43,7 @@ async function loadUsers() {
     });
     
     try {
-        const data = await apiRequest(`/api/users?${params}`);
+        const data = await apiRequest(`${window.API_URLS.users}?${params}`);
         renderUsersTable(data.users);
         renderPagination(data.total, data.pages, data.current_page);
     } catch (error) {
@@ -108,7 +108,7 @@ async function addUser() {
     }
     
     try {
-        await apiRequest('/api/users', {
+        await apiRequest(window.API_URLS.createUser, {
             method: 'POST',
             body: JSON.stringify({
                 username: username,
@@ -133,7 +133,7 @@ async function updateUserRole(userId) {
     }
     const newRole = select.value;
     try {
-        await apiRequest(`/api/users/${userId}`, {
+        await apiRequest(window.API_URLS.updateUser(userId), {
             method: 'PUT',
             body: JSON.stringify({ role: newRole })
         });
@@ -191,7 +191,7 @@ function openResetPasswordModal(userId, username) {
             return;
         }
         try {
-            await apiRequest(`/api/users/${userId}/reset-password`, {
+            await apiRequest(window.API_URLS.resetPassword(userId), {
                 method: 'PUT',
                 body: JSON.stringify({ new_password: newPwd })
             });
@@ -218,7 +218,7 @@ async function deleteUser(userId) {
     }
     
     try {
-        await apiRequest(`/api/users/${userId}`, {
+        await apiRequest(window.API_URLS.deleteUser(userId), {
             method: 'DELETE'
         });
         

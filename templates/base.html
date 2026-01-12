@@ -165,6 +165,70 @@
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- API URLs Configuration -->
+    <script>
+        // API URLs using Flask url_for
+        window.API_URLS = {
+            // Technologies
+            technologies: '{{ url_for("api_get_technologies") }}',
+            createTechnology: '{{ url_for("api_create_technology") }}',
+            updateTechnology: function(id) { return '{{ url_for("api_update_technology", tech_id=0) }}'.replace('0', id); },
+            deleteTechnology: function(id) { return '{{ url_for("api_delete_technology", tech_id=0) }}'.replace('0', id); },
+            
+            // Routers
+            routers: '{{ url_for("api_get_routers") }}',
+            createRouter: '{{ url_for("api_create_router") }}',
+            updateRouter: function(id) { return '{{ url_for("api_update_router", router_id=0) }}'.replace('0', id); },
+            deleteRouter: function(id) { return '{{ url_for("api_delete_router", router_id=0) }}'.replace('0', id); },
+            
+            // Interfaces
+            interfaces: '{{ url_for("api_get_interfaces") }}',
+            createInterface: '{{ url_for("api_create_interface") }}',
+            deleteInterface: function(id) { return '{{ url_for("api_delete_interface", interface_id=0) }}'.replace('0', id); },
+            
+            // VLANs
+            vlans: '{{ url_for("api_get_vlans") }}',
+            createVlan: '{{ url_for("api_create_vlan") }}',
+            deleteVlan: function(id) { return '{{ url_for("api_delete_vlan", vlan_id=0) }}'.replace('0', id); },
+            
+            // IPs
+            ips: '{{ url_for("api_get_ips") }}',
+            createIp: '{{ url_for("api_create_ip") }}',
+            deleteIp: function(id) { return '{{ url_for("api_delete_ip", ip_id=0) }}'.replace('0', id); },
+            bulkDeleteIps: '{{ url_for("api_bulk_delete_ips") }}',
+            availableIps: '{{ url_for("api_get_available_ips") }}',
+            
+            // Sites
+            sites: '{{ url_for("api_get_sites") }}',
+            createSite: '{{ url_for("api_create_site") }}',
+            releaseSite: function(id) { return '{{ url_for("api_release_site", site_id=0) }}'.replace('0', id); },
+            bulkReleaseSites: '{{ url_for("api_release_sites") }}',
+            transferCheck: '{{ url_for("api_transfer_sites_check") }}',
+            transferSites: '{{ url_for("api_transfer_sites") }}',
+            sitesConfig: '{{ url_for("api_generate_site_configs") }}',
+            sitesTemplateDownload: '{{ url_for("api_download_sites_template") }}',
+            sitesBulkImport: '{{ url_for("api_bulk_import_sites") }}',
+            
+            // Vendors
+            vendors: '{{ url_for("api_get_vendors") }}',
+            createVendor: '{{ url_for("api_create_vendor") }}',
+            updateVendor: function(id) { return '{{ url_for("api_update_vendor", vendor_id=0) }}'.replace('0', id); },
+            deleteVendor: function(id) { return '{{ url_for("api_delete_vendor", vendor_id=0) }}'.replace('0', id); },
+            
+            // Users
+            users: '{{ url_for("api_get_users") }}',
+            createUser: '{{ url_for("api_create_user") }}',
+            updateUser: function(id) { return '{{ url_for("api_update_user", user_id=0) }}'.replace('0', id); },
+            deleteUser: function(id) { return '{{ url_for("api_delete_user", user_id=0) }}'.replace('0', id); },
+            resetPassword: function(id) { return '{{ url_for("api_admin_reset_password", user_id=0) }}'.replace('0', id); },
+            
+            // Utilities
+            subnetCalculator: '{{ url_for("api_calculate_subnets") }}',
+            stats: '{{ url_for("api_get_stats") }}',
+            activityLogs: '{{ url_for("api_get_activity_logs") }}',
+            exportSites: '{{ url_for("api_export_sites") }}'
+        };
+    </script>
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <!-- Searchable Dropdown -->

@@ -75,7 +75,7 @@ function setupEventListeners() {
 
 async function loadRouters() {
     try {
-        const data = await apiRequest('/api/routers');
+        const data = await apiRequest(window.API_URLS.routers);
         const filterSelect = document.getElementById('routerFilter');
         filterSelect.innerHTML = '<option value="">All Routers</option>' + 
             data.routers.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
@@ -86,7 +86,7 @@ async function loadRouters() {
 
 async function loadRoutersForSelect() {
     try {
-        const data = await apiRequest('/api/routers');
+        const data = await apiRequest(window.API_URLS.routers);
         const select = document.getElementById('interfaceRouter');
         select.innerHTML = '<option value="">Select Router</option>' + 
             data.routers.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
@@ -108,7 +108,7 @@ async function loadInterfaces() {
     if (routerId) params.append('router_id', routerId);
     
     try {
-        const data = await apiRequest(`/api/interfaces?${params}`);
+        const data = await apiRequest(`${window.API_URLS.interfaces}?${params}`);
         window._interfacesPage = data.interfaces || [];
         renderInterfacesTable(data.interfaces);
         renderPagination(data.total, data.pages, data.current_page);
@@ -213,7 +213,7 @@ async function deleteSelectedInterfaces() {
     
     try {
         for (const interfaceId of selectedIds) {
-            await apiRequest(`/api/interfaces/${interfaceId}`, {
+            await apiRequest(window.API_URLS.deleteInterface(interfaceId), {
                 method: 'DELETE'
             });
         }
@@ -280,7 +280,7 @@ async function addInterface() {
     }
     
     try {
-        await apiRequest('/api/interfaces', {
+        await apiRequest(window.API_URLS.createInterface, {
             method: 'POST',
             body: JSON.stringify({
                 router_id: parseInt(routerId),

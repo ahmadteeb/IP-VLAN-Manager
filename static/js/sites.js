@@ -171,7 +171,7 @@ function setupEventListeners() {
 
 async function loadTechnologiesForSitesPage() {
     try {
-        const data = await apiRequest('/api/technologies');
+        const data = await apiRequest(window.API_URLS.technologies);
         const techs = data.technologies || [];
 
         // Filter dropdown
@@ -205,7 +205,7 @@ async function loadSites() {
     if (tech) params.append('technology', tech);
     
     try {
-        const data = await apiRequest(`/api/sites?${params}`);
+        const data = await apiRequest(`${window.API_URLS.sites}?${params}`);
         window._sitesPage = data.sites || [];
         renderSitesTable(data.sites);
         renderPagination(data.total, data.pages, data.current_page);
@@ -316,7 +316,7 @@ async function generateConfigForSelectedSites() {
     }
 
     try {
-        const data = await apiRequest('/api/sites/config', {
+        const data = await apiRequest(window.API_URLS.sitesConfig, {
             method: 'POST',
             body: JSON.stringify({ site_ids: selectedIds })
         });
@@ -439,7 +439,7 @@ function changePage(page) {
 
 async function loadVendorsForSelect() {
     try {
-        const data = await apiRequest('/api/vendors');
+        const data = await apiRequest(window.API_URLS.vendors);
         const select = document.getElementById('siteVendor');
         select.innerHTML = '<option value="">Select Vendor</option>' + 
             data.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
@@ -454,7 +454,7 @@ async function loadVendorsForSelect() {
 
 async function loadRoutersForSelect() {
     try {
-        const data = await apiRequest('/api/routers');
+        const data = await apiRequest(window.API_URLS.routers);
         const select = document.getElementById('siteRouter');
         select.innerHTML = '<option value="">Select Router</option>' + 
             data.routers.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
@@ -469,7 +469,7 @@ async function loadRoutersForSelect() {
 
 async function loadInterfacesForRouter(routerId) {
     try {
-        const data = await apiRequest(`/api/interfaces?router_id=${routerId}`);
+        const data = await apiRequest(`${window.API_URLS.interfaces}?router_id=${routerId}`);
         const select = document.getElementById('siteInterface');
         select.innerHTML = '<option value="">Select Interface</option>' + 
             data.interfaces.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
@@ -527,7 +527,7 @@ async function addSite() {
             requestBody.interface_id = parseInt(interfaceId);
         }
         
-        const data = await apiRequest('/api/sites', {
+        const data = await apiRequest(window.API_URLS.createSite, {
             method: 'POST',
             body: JSON.stringify(requestBody)
         });
@@ -546,7 +546,7 @@ async function addSite() {
 
 async function loadRoutersForTransfer() {
     try {
-        const data = await apiRequest('/api/routers');
+        const data = await apiRequest(window.API_URLS.routers);
         const select = document.getElementById('transferRouter');
         select.innerHTML = '<option value="">Select Router</option>' + 
             data.routers.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
@@ -560,7 +560,7 @@ async function loadRoutersForTransfer() {
 
 async function loadInterfacesForTransferRouter(routerId) {
     try {
-        const data = await apiRequest(`/api/interfaces?router_id=${routerId}`);
+        const data = await apiRequest(`${window.API_URLS.interfaces}?router_id=${routerId}`);
         const select = document.getElementById('transferInterface');
         select.innerHTML = '<option value="">Select Interface</option>' + 
             data.interfaces.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
@@ -575,7 +575,7 @@ async function loadInterfacesForTransferRouter(routerId) {
 async function openTransferModal(selectedSiteIds) {
     try {
         // Get site info from API
-        const sitesData = await apiRequest('/api/sites');
+        const sitesData = await apiRequest(window.API_URLS.sites);
         const selectedSites = sitesData.sites.filter(s => selectedSiteIds.includes(s.id));
         
         const sitesList = document.getElementById('selectedSitesList');
@@ -611,7 +611,7 @@ async function transferSites() {
     
     try {
         // First check for VLAN conflicts
-        const checkData = await apiRequest('/api/sites/transfer/check', {
+        const checkData = await apiRequest(window.API_URLS.transferCheck, {
             method: 'POST',
             body: JSON.stringify({
                 site_ids: selectedIds,
@@ -641,7 +641,7 @@ async function transferSites() {
         }
         
         // Proceed with transfer
-        const data = await apiRequest('/api/sites/transfer', {
+        const data = await apiRequest(window.API_URLS.transferSites, {
             method: 'POST',
             body: JSON.stringify({
                 site_ids: selectedIds,
@@ -680,7 +680,7 @@ async function releaseSelectedSites(siteIds) {
     }
     
     try {
-        const data = await apiRequest('/api/sites/release', {
+        const data = await apiRequest(window.API_URLS.bulkReleaseSites, {
             method: 'POST',
             body: JSON.stringify({
                 site_ids: siteIds
@@ -713,7 +713,7 @@ async function downloadTemplate() {
     }
     
     try {
-        const response = await fetch('/api/sites/template/download', {
+        const response = await fetch(window.API_URLS.sitesTemplateDownload, {
             method: 'GET',
             credentials: 'same-origin'
         });
@@ -776,7 +776,7 @@ async function bulkImportSites() {
     confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" style="width: 0.75rem; height: 0.75rem; border-width: 0.1em;"></span>Importing...';
     
     try {
-        const response = await fetch('/api/sites/bulk-import', {
+        const response = await fetch(window.API_URLS.sitesBulkImport, {
             method: 'POST',
             body: formData
         });

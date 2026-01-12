@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function loadTechnologiesForIpsPage() {
     try {
-        const data = await apiRequest('/api/technologies');
+        const data = await apiRequest(window.API_URLS.technologies);
         const techs = data.technologies || [];
         const select = document.getElementById('ipTechnology');
         if (select) {
@@ -250,7 +250,7 @@ async function loadIPs() {
     if (status) params.append('status', status);
     
     try {
-        const data = await apiRequest(`/api/ips?${params}`);
+        const data = await apiRequest(`${window.API_URLS.ips}?${params}`);
         window._ipsPage = data.ips || [];
         renderIPsTable(data.ips);
         renderPagination(data.total, data.pages, data.current_page);
@@ -387,7 +387,7 @@ async function deleteSelectedIPs() {
 
         for (let i = 0; i < selectedIds.length; i += batchSize) {
             const chunk = selectedIds.slice(i, i + batchSize);
-            const res = await apiRequest('/api/ips/bulk-delete', {
+            const res = await apiRequest(window.API_URLS.bulkDeleteIps, {
                 method: 'POST',
                 body: JSON.stringify({ ip_ids: chunk })
             });
@@ -474,7 +474,7 @@ function resetAddIpForm() {
 
 async function loadVendorsForSelect() {
     try {
-        const data = await apiRequest('/api/vendors');
+        const data = await apiRequest(window.API_URLS.vendors);
         const select = document.getElementById('ipVendor');
         select.innerHTML = '<option value="">Select Vendor</option>' + 
             data.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
@@ -570,7 +570,7 @@ async function addIP() {
     }
     
     try {
-        const response = await apiRequest('/api/ips', {
+        const response = await apiRequest(window.API_URLS.createIp, {
             method: 'POST',
             body: JSON.stringify(requestData)
         });

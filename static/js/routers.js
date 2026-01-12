@@ -83,7 +83,7 @@ async function loadRouters() {
     if (search) params.append('search', search);
     
     try {
-        const data = await apiRequest(`/api/routers?${params}`);
+        const data = await apiRequest(`${window.API_URLS.routers}?${params}`);
         window._routersPage = data.routers || [];
         renderRoutersTable(data.routers);
         renderPagination(data.total, data.pages, data.current_page);
@@ -192,7 +192,7 @@ async function deleteSelectedRouters() {
     
     try {
         for (const routerId of selectedIds) {
-            await apiRequest(`/api/routers/${routerId}`, {
+            await apiRequest(window.API_URLS.deleteRouter(routerId), {
                 method: 'DELETE'
             });
         }
@@ -261,7 +261,7 @@ async function addRouter() {
     }
     
     try {
-        await apiRequest('/api/routers', {
+        await apiRequest(window.API_URLS.createRouter, {
             method: 'POST',
             body: JSON.stringify({
                 name: name,
