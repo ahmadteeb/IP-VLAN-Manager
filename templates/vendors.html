@@ -10,18 +10,19 @@
             <i class="fas fa-building"></i> Vendors
         </h5>
         <div>
-            {% if current_user.is_admin() %}
+            {% if current_user.has_permission('vendors.export') %}
             <button class="btn btn-sm btn-outline-success" id="exportVendorsBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
-            <button class="btn btn-sm btn-danger" id="deleteVendorsBtn" style="display: none;">
-                <i class="fas fa-trash"></i> Delete Selected
-            </button>
-            <button class="btn btn-sm btn-info" id="editVendorsBtn" style="display: none;">
-                <i class="fas fa-edit"></i> Edit Selected
-            </button>
+            {% endif %}
+            {% if current_user.has_permission('vendors.add') %}
             <button class="btn btn-sm btn-primary" id="addVendorBtn">
                 <i class="fas fa-plus"></i> Add Vendor
+            </button>
+            {% endif %}
+            {% if current_user.has_permission('vendors.delete') %}
+            <button class="btn btn-sm btn-danger" id="deleteVendorsBtn" style="display: none;">
+                <i class="fas fa-trash"></i> Delete Selected
             </button>
             {% endif %}
         </div>
@@ -31,7 +32,7 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        {% if current_user.is_authenticated and current_user.is_admin() %}
+                        {% if current_user.is_authenticated and (current_user.has_permission('vendors.delete') or current_user.has_permission('vendors.export')) %}
                         <th><input type="checkbox" id="selectAllVendors" title="Select All"></th>
                         {% endif %}
                         <th>ID</th>
@@ -75,30 +76,6 @@
     </div>
 </div>
 
-<!-- Edit Vendor Modal -->
-<div class="modal fade" id="editVendorModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edit Vendor</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="editVendorForm">
-                    <input type="hidden" id="editVendorId">
-                    <div class="mb-3">
-                        <label class="form-label">Vendor Name *</label>
-                        <input type="text" class="form-control" id="editVendorName" required>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="confirmEditVendor">Update Vendor</button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}

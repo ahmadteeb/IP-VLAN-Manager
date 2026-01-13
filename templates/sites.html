@@ -10,17 +10,18 @@
             <i class="fas fa-building"></i> Sites
         </h5>
         <div>
-            <select class="form-select form-select-sm d-inline-block me-2" id="techFilter" style="width: auto;">
-                <option value="">All Technologies</option>
-            </select>
             <input type="text" class="form-control form-control-sm d-inline-block me-2" id="searchInput" placeholder="Search..." style="width: 200px;">
+            {% if current_user.has_permission('sites.export') %}
             <button class="btn btn-sm btn-outline-success" id="exportSitesBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
+            {% endif %}
+            {% if current_user.has_permission('sites.generate_config') %}
             <button class="btn btn-sm btn-outline-primary" id="generateConfigBtn">
                 <i class="fas fa-cog"></i> Generate Config
             </button>
-            {% if current_user.is_authenticated and (current_user.has_permission('sites.create') or current_user.has_permission('sites.transfer') or current_user.has_permission('sites.release') or current_user.has_permission('sites.import')) %}
+            {% endif %}
+            {% if current_user.is_authenticated and (current_user.has_permission('sites.add') or current_user.has_permission('sites.transfer') or current_user.has_permission('sites.release') or current_user.has_permission('sites.import')) %}
             {% if current_user.has_permission('sites.transfer') %}
             <button class="btn btn-sm btn-warning" id="transferSitesBtn" style="display: none;">
                 <i class="fas fa-exchange-alt"></i> Transfer Selected
@@ -36,7 +37,7 @@
                 <i class="fas fa-file-excel"></i> Bulk Add Sites
             </button>
             {% endif %}
-            {% if current_user.has_permission('sites.create') %}
+            {% if current_user.has_permission('sites.add') %}
             <button class="btn btn-sm btn-primary" id="addSiteBtn">
                 <i class="fas fa-plus"></i> Add Site
             </button>
@@ -49,7 +50,9 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
+                        {% if current_user.is_authenticated and (current_user.has_permission('sites.export') or current_user.has_permission('sites.generate_config') or current_user.has_permission('sites.transfer') or current_user.has_permission('sites.release')) %}
                         <th><input type="checkbox" id="selectAllSites" title="Select All"></th>
+                        {% endif %}
                         <th>Site ID</th>
                         <th>Site Name</th>
                         <th>Technology</th>

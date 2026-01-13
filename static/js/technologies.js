@@ -86,16 +86,15 @@ function updateSelectAllTechsCheckbox() {
     selectAll.checked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
 }
 
-function openTechModal(id = null, _unused = '', name = '') {
-    document.getElementById('techId').value = id ? String(id) : '';
-    document.getElementById('techLabel').value = name || '';
-    document.getElementById('techModalTitle').textContent = id ? 'Edit Technology' : 'Add Technology';
+function openTechModal() {
+    document.getElementById('techId').value = '';
+    document.getElementById('techLabel').value = '';
+    document.getElementById('techModalTitle').textContent = 'Add Technology';
     const modal = new bootstrap.Modal(document.getElementById('techModal'));
     modal.show();
 }
 
 async function saveTechnology() {
-    const id = document.getElementById('techId').value;
     const name = document.getElementById('techLabel').value.trim();
 
     if (!name) {
@@ -104,19 +103,11 @@ async function saveTechnology() {
     }
 
     try {
-        if (id) {
-            await apiRequest(window.API_URLS.updateTechnology(parseInt(id,10)), {
-                method: 'PUT',
-                body: JSON.stringify({ name })
-            });
-            showToast('Success', 'Technology updated', 'success');
-        } else {
-            await apiRequest(window.API_URLS.createTechnology, {
-                method: 'POST',
-                body: JSON.stringify({ name })
-            });
-            showToast('Success', 'Technology created', 'success');
-        }
+        await apiRequest(window.API_URLS.addTechnology, {
+            method: 'POST',
+            body: JSON.stringify({ name })
+        });
+        showToast('Success', 'Technology created', 'success');
         bootstrap.Modal.getInstance(document.getElementById('techModal')).hide();
         loadTechnologies();
     } catch (error) {

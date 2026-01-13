@@ -38,76 +38,175 @@
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h4><i class="fas fa-network-wired"></i> <span>IP/VLAN Manager</span></h4>
-            <button class="btn btn-link text-light d-md-none" id="sidebarToggle">
+            <div class="sidebar-logo">
+                <i class="fas fa-network-wired"></i>
+                <span class="sidebar-logo-text">IP/VLAN Manager</span>
+            </div>
+            <button class="btn btn-link text-light d-md-none sidebar-close-btn" id="sidebarToggle">
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <ul class="sidebar-menu">
-            {% if current_user.is_authenticated and current_user.has_permission('dashboard.view') %}
-            <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard">
-                <i class="fas fa-home"></i> <span>Dashboard</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('sites.view') %}
-            <li><a href="{{ url_for('sites') }}" class="{% if request.endpoint == 'sites' %}active{% endif %}" title="Sites">
-                <i class="fas fa-building"></i> <span>Sites</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('routers.view') %}
-            <li><a href="{{ url_for('routers') }}" class="{% if request.endpoint == 'routers' %}active{% endif %}" title="Routers">
-                <i class="fas fa-network-wired"></i> <span>Routers</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('interfaces.view') %}
-            <li><a href="{{ url_for('interfaces') }}" class="{% if request.endpoint == 'interfaces' %}active{% endif %}" title="Interfaces">
-                <i class="fas fa-plug"></i> <span>Interfaces</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('vlans.view') %}
-            <li><a href="{{ url_for('vlans') }}" class="{% if request.endpoint == 'vlans' %}active{% endif %}" title="VLANs">
-                <i class="fas fa-network-wired"></i> <span>VLANs</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('ips.view') %}
-            <li><a href="{{ url_for('ips') }}" class="{% if request.endpoint == 'ips' %}active{% endif %}" title="IPs">
-                <i class="fas fa-server"></i> <span>IPs</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('technologies.view') %}
-            <li><a href="{{ url_for('technologies') }}" class="{% if request.endpoint == 'technologies' %}active{% endif %}" title="Technologies">
-                <i class="fas fa-microchip"></i> <span>Technologies</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('vendors.view') %}
-            <li><a href="{{ url_for('vendors') }}" class="{% if request.endpoint == 'vendors' %}active{% endif %}" title="Vendors">
-                <i class="fas fa-building"></i> <span>Vendors</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('utils.subnet_calculator') %}
-            <li><a href="{{ url_for('subnet_calculator') }}" class="{% if request.endpoint == 'subnet_calculator' %}active{% endif %}" title="Subnet Calculator">
-                <i class="fas fa-calculator"></i> <span>Subnet Calculator</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('logs.view') %}
-            <li><a href="{{ url_for('activity_logs') }}" class="{% if request.endpoint == 'activity_logs' %}active{% endif %}" title="Activity Logs">
-                <i class="fas fa-history"></i> <span>Activity Logs</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('users.manage') %}
-            <li><a href="{{ url_for('users') }}" class="{% if request.endpoint == 'users' %}active{% endif %}" title="Users">
-                <i class="fas fa-users"></i> <span>Users</span>
-            </a></li>
-            {% endif %}
-            {% if current_user.is_authenticated and current_user.has_permission('roles.manage') %}
-            <li><a href="{{ url_for('roles') }}" class="{% if request.endpoint == 'roles' %}active{% endif %}" title="Roles">
-                <i class="fas fa-user-shield"></i> <span>Roles</span>
-            </a></li>
-            {% endif %}
-        </ul>
+        <div class="sidebar-menu-wrapper">
+            <ul class="sidebar-menu">
+                {% if current_user.is_authenticated and current_user.has_permission('dashboard.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('dashboard') }}" class="menu-link {% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard">
+                        <span class="menu-icon"><i class="fas fa-home"></i></span>
+                        <span class="menu-text">Dashboard</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% set has_network = current_user.is_authenticated and (
+                    current_user.has_permission('sites.view') or
+                    current_user.has_permission('routers.view') or
+                    current_user.has_permission('interfaces.view') or
+                    current_user.has_permission('vlans.view') or
+                    current_user.has_permission('ips.view')
+                ) %}
+                {% if has_network %}
+                <li class="menu-divider">
+                    <span class="menu-divider-text">Network</span>
+                </li>
+                {% endif %}
+                
+                {% if current_user.is_authenticated and current_user.has_permission('sites.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('sites') }}" class="menu-link {% if request.endpoint == 'sites' %}active{% endif %}" title="Sites">
+                        <span class="menu-icon"><i class="fas fa-building"></i></span>
+                        <span class="menu-text">Sites</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('routers.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('routers') }}" class="menu-link {% if request.endpoint == 'routers' %}active{% endif %}" title="Routers">
+                        <span class="menu-icon"><i class="fas fa-network-wired"></i></span>
+                        <span class="menu-text">Routers</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('interfaces.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('interfaces') }}" class="menu-link {% if request.endpoint == 'interfaces' %}active{% endif %}" title="Interfaces">
+                        <span class="menu-icon"><i class="fas fa-plug"></i></span>
+                        <span class="menu-text">Interfaces</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('vlans.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('vlans') }}" class="menu-link {% if request.endpoint == 'vlans' %}active{% endif %}" title="VLANs">
+                        <span class="menu-icon"><i class="fas fa-sitemap"></i></span>
+                        <span class="menu-text">VLANs</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('ips.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('ips') }}" class="menu-link {% if request.endpoint == 'ips' %}active{% endif %}" title="IPs">
+                        <span class="menu-icon"><i class="fas fa-server"></i></span>
+                        <span class="menu-text">IPs</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% set has_resources = current_user.is_authenticated and (
+                    current_user.has_permission('technologies.view') or
+                    current_user.has_permission('vendors.view')
+                ) %}
+                {% if has_resources %}
+                <li class="menu-divider">
+                    <span class="menu-divider-text">Resources</span>
+                </li>
+                {% endif %}
+                
+                {% if current_user.is_authenticated and current_user.has_permission('technologies.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('technologies') }}" class="menu-link {% if request.endpoint == 'technologies' %}active{% endif %}" title="Technologies">
+                        <span class="menu-icon"><i class="fas fa-microchip"></i></span>
+                        <span class="menu-text">Technologies</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('vendors.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('vendors') }}" class="menu-link {% if request.endpoint == 'vendors' %}active{% endif %}" title="Vendors">
+                        <span class="menu-icon"><i class="fas fa-industry"></i></span>
+                        <span class="menu-text">Vendors</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% set has_tools = current_user.is_authenticated and current_user.has_permission('utils.subnet_calculator') %}
+                {% if has_tools %}
+                <li class="menu-divider">
+                    <span class="menu-divider-text">Tools</span>
+                </li>
+                {% endif %}
+                
+                {% if current_user.is_authenticated and current_user.has_permission('utils.subnet_calculator') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('subnet_calculator') }}" class="menu-link {% if request.endpoint == 'subnet_calculator' %}active{% endif %}" title="Subnet Calculator">
+                        <span class="menu-icon"><i class="fas fa-calculator"></i></span>
+                        <span class="menu-text">Subnet Calculator</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% set has_administration = current_user.is_authenticated and (
+                    current_user.has_permission('logs.view') or
+                    current_user.has_permission('users.manage') or
+                    current_user.has_permission('roles.manage')
+                ) %}
+                {% if has_administration %}
+                <li class="menu-divider">
+                    <span class="menu-divider-text">Administration</span>
+                </li>
+                {% endif %}
+                
+                {% if current_user.is_authenticated and current_user.has_permission('logs.view') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('activity_logs') }}" class="menu-link {% if request.endpoint == 'activity_logs' %}active{% endif %}" title="Activity Logs">
+                        <span class="menu-icon"><i class="fas fa-history"></i></span>
+                        <span class="menu-text">Activity Logs</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('users.manage') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('users') }}" class="menu-link {% if request.endpoint == 'users' %}active{% endif %}" title="Users">
+                        <span class="menu-icon"><i class="fas fa-users"></i></span>
+                        <span class="menu-text">Users</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('roles.manage') %}
+                <li class="menu-item">
+                    <a href="{{ url_for('roles') }}" class="menu-link {% if request.endpoint == 'roles' %}active{% endif %}" title="Roles">
+                        <span class="menu-icon"><i class="fas fa-user-shield"></i></span>
+                        <span class="menu-text">Roles</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
         <div class="sidebar-footer">
-            <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light w-100 text-start">
-                <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+            <a href="{{ url_for('logout') }}" class="sidebar-logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
             </a>
         </div>
     </div>
@@ -128,11 +227,13 @@
                 </div>
                 <div class="d-flex align-items-center gap-3">
                     {% set user_initial = current_user.username[0]|upper if current_user.username else 'U' %}
-                    <div class="user-pill d-none d-md-flex align-items-center gap-2">
-                        <div class="user-avatar">{{ user_initial }}</div>
-                        <div class="d-flex flex-column">
-                            <span class="fw-semibold text-truncate">{{ current_user.username }}</span>
-                            <small class="text-muted text-uppercase">{{ current_user.get_role_name() }}</small>
+                    <div class="user-pill d-none d-md-flex align-items-center gap-3">
+                        <div class="user-avatar">
+                            <span class="user-avatar-initial">{{ user_initial }}</span>
+                        </div>
+                        <div class="user-info">
+                            <span class="user-name">{{ current_user.username }}</span>
+                            <span class="user-role">{{ current_user.get_role_name() }}</span>
                         </div>
                     </div>
                     <button class="btn btn-icon" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">
@@ -197,36 +298,34 @@
         window.API_URLS = {
             // Technologies
             technologies: '{{ url_for("api_get_technologies") }}',
-            createTechnology: '{{ url_for("api_create_technology") }}',
-            updateTechnology: function(id) { return '{{ url_for("api_update_technology", tech_id=0) }}'.replace('0', id); },
+            addTechnology: '{{ url_for("api_add_technology") }}',
             deleteTechnology: function(id) { return '{{ url_for("api_delete_technology", tech_id=0) }}'.replace('0', id); },
             
             // Routers
             routers: '{{ url_for("api_get_routers") }}',
-            createRouter: '{{ url_for("api_create_router") }}',
-            updateRouter: function(id) { return '{{ url_for("api_update_router", router_id=0) }}'.replace('0', id); },
+            addRouter: '{{ url_for("api_add_router") }}',
             deleteRouter: function(id) { return '{{ url_for("api_delete_router", router_id=0) }}'.replace('0', id); },
             
             // Interfaces
             interfaces: '{{ url_for("api_get_interfaces") }}',
-            createInterface: '{{ url_for("api_create_interface") }}',
+            addInterface: '{{ url_for("api_add_interface") }}',
             deleteInterface: function(id) { return '{{ url_for("api_delete_interface", interface_id=0) }}'.replace('0', id); },
             
             // VLANs
             vlans: '{{ url_for("api_get_vlans") }}',
-            createVlan: '{{ url_for("api_create_vlan") }}',
+            addVlan: '{{ url_for("api_add_vlan") }}',
             deleteVlan: function(id) { return '{{ url_for("api_delete_vlan", vlan_id=0) }}'.replace('0', id); },
             
             // IPs
             ips: '{{ url_for("api_get_ips") }}',
-            createIp: '{{ url_for("api_create_ip") }}',
+            addIp: '{{ url_for("api_add_ip") }}',
             deleteIp: function(id) { return '{{ url_for("api_delete_ip", ip_id=0) }}'.replace('0', id); },
             bulkDeleteIps: '{{ url_for("api_bulk_delete_ips") }}',
             availableIps: '{{ url_for("api_get_available_ips") }}',
             
             // Sites
             sites: '{{ url_for("api_get_sites") }}',
-            createSite: '{{ url_for("api_create_site") }}',
+            addSite: '{{ url_for("api_add_site") }}',
             releaseSite: function(id) { return '{{ url_for("api_release_site", site_id=0) }}'.replace('0', id); },
             bulkReleaseSites: '{{ url_for("api_release_sites") }}',
             transferCheck: '{{ url_for("api_transfer_sites_check") }}',
@@ -237,13 +336,12 @@
             
             // Vendors
             vendors: '{{ url_for("api_get_vendors") }}',
-            createVendor: '{{ url_for("api_create_vendor") }}',
-            updateVendor: function(id) { return '{{ url_for("api_update_vendor", vendor_id=0) }}'.replace('0', id); },
+            addVendor: '{{ url_for("api_add_vendor") }}',
             deleteVendor: function(id) { return '{{ url_for("api_delete_vendor", vendor_id=0) }}'.replace('0', id); },
             
             // Users
             users: '{{ url_for("api_get_users") }}',
-            createUser: '{{ url_for("api_create_user") }}',
+            addUser: '{{ url_for("api_add_user") }}',
             updateUser: function(id) { return '{{ url_for("api_update_user", user_id=0) }}'.replace('0', id); },
             deleteUser: function(id) { return '{{ url_for("api_delete_user", user_id=0) }}'.replace('0', id); },
             resetPassword: function(id) { return '{{ url_for("api_admin_reset_password", user_id=0) }}'.replace('0', id); },
@@ -251,7 +349,7 @@
             // Roles
             roles: '{{ url_for("api_get_roles") }}',
             permissions: '{{ url_for("api_get_permissions") }}',
-            createRole: '{{ url_for("api_create_role") }}',
+            addRole: '{{ url_for("api_add_role") }}',
             updateRole: function(id) { return '{{ url_for("api_update_role", role_id=0) }}'.replace('0', id); },
             deleteRole: function(id) { return '{{ url_for("api_delete_role", role_id=0) }}'.replace('0', id); },
             

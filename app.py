@@ -11,7 +11,6 @@ from functools import wraps
 import ipaddress
 import io
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import text, inspect
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -22,6 +21,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -44,46 +44,6 @@ def permission_required(permission_code):
         return decorated_function
     return decorator
 
-def admin_required(f):
-    """Decorator to require admin role or admin.full_access permission"""
-    @wraps(f)
-    @login_required
-    def decorated_function(*args, **kwargs):
-        try:
-            if not current_user.has_permission('admin.full_access'):
-                app.logger.warning(f'User {current_user.username} attempted to access {f.__name__} without admin permission')
-                abort(403)
-        except Exception as e:
-            app.logger.error(f'Error in admin_required: {str(e)}', exc_info=True)
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated_function
-
-def write_access_required(f):
-    """Decorator to disallow actions for read-only users - checks for any write permission"""
-    @wraps(f)
-    @login_required
-    def decorated_function(*args, **kwargs):
-        try:
-            # Check if user has any write permissions
-            write_permissions = [
-                'routers.create', 'routers.update', 'routers.delete',
-                'interfaces.create', 'interfaces.delete',
-                'vlans.create', 'vlans.delete',
-                'ips.create', 'ips.delete',
-                'sites.create', 'sites.update', 'sites.delete', 'sites.release', 'sites.transfer',
-                'vendors.create', 'vendors.update', 'vendors.delete',
-                'technologies.create', 'technologies.update', 'technologies.delete'
-            ]
-            has_write = any(current_user.has_permission(p) for p in write_permissions)
-            if not has_write:
-                app.logger.warning(f'User {current_user.username} attempted write action without permission')
-                abort(403)
-        except Exception as e:
-            app.logger.error(f'Error in write_access_required: {str(e)}', exc_info=True)
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated_function
 def log_activity(action, resource_type, resource_id, resource_value, site_name=None, router=None, interface=None):
     """Helper function to log activities"""
     log = ActivityLog(
@@ -244,9 +204,9 @@ def api_get_technologies():
 
 @app.route('/api/technologies', methods=['POST'])
 @login_required
-@permission_required('technologies.create')
-def api_create_technology():
-    """Create a new technology entry"""
+@permission_required('technologies.add')
+def api_add_technology():
+    """Add a new technology entry"""
     try:
         data = request.json or {}
         name = (data.get('name') or '').strip()
@@ -257,29 +217,10 @@ def api_create_technology():
         tech = Technology(name=name)
         db.session.add(tech)
         db.session.commit()
-        return jsonify({'message': 'Technology created', 'technology': tech.to_dict()}), 201
+        return jsonify({'message': 'Technology added', 'technology': tech.to_dict()}), 201
     except Exception as e:
-        app.logger.error(f'Error creating technology: {str(e)}', exc_info=True)
-        return jsonify({'error': 'Failed to create technology'}), 500
-
-@app.route('/api/technologies/<int:tech_id>', methods=['PUT'])
-@login_required
-@permission_required('technologies.update')
-def api_update_technology(tech_id):
-    """Update a technology entry"""
-    try:
-        tech = Technology.query.get_or_404(tech_id)
-        data = request.json or {}
-        if 'name' in data and data['name']:
-            new_name = data['name'].strip()
-            if Technology.query.filter(Technology.id != tech_id, Technology.name == new_name).first():
-                return jsonify({'error': 'Technology name already exists'}), 400
-            tech.name = new_name
-        db.session.commit()
-        return jsonify({'message': 'Technology updated', 'technology': tech.to_dict()})
-    except Exception as e:
-        app.logger.error(f'Error updating technology {tech_id}: {str(e)}', exc_info=True)
-        return jsonify({'error': 'Failed to update technology'}), 500
+        app.logger.error(f'Error adding technology: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to add technology'}), 500
 
 @app.route('/api/technologies/<int:tech_id>', methods=['DELETE'])
 @login_required
@@ -288,8 +229,10 @@ def api_delete_technology(tech_id):
     """Delete a technology entry"""
     try:
         tech = Technology.query.get_or_404(tech_id)
+        tech_name = tech.name
         db.session.delete(tech)
         db.session.commit()
+        log_activity('delete_technology', 'technology', tech_id, tech_name)
         return jsonify({'message': 'Technology deleted'})
     except Exception as e:
         app.logger.error(f'Error deleting technology {tech_id}: {str(e)}', exc_info=True)
@@ -335,9 +278,9 @@ def api_get_routers():
 
 @app.route('/api/routers', methods=['POST'])
 @login_required
-@permission_required('routers.create')
-def api_create_router():
-    """Create a new router"""
+@permission_required('routers.add')
+def api_add_router():
+    """Add a new router"""
     data = request.json
     name = data.get('name')
     router_ip = data.get('router_ip')
@@ -357,37 +300,9 @@ def api_create_router():
     db.session.add(router)
     db.session.commit()
     
-    log_activity('create_router', 'router', router.id, router.name)
+    log_activity('add_router', 'router', router.id, router.name)
     
-    return jsonify({'message': 'Router created successfully', 'router': router.to_dict()}), 201
-
-@app.route('/api/routers/<int:router_id>', methods=['PUT'])
-@login_required
-@permission_required('routers.update')
-def api_update_router(router_id):
-    """Update a router"""
-    router = Router.query.get_or_404(router_id)
-    data = request.json
-    
-    if 'name' in data:
-        if Router.query.filter(Router.id != router_id, Router.name == data['name']).first():
-            return jsonify({'error': 'Router with this name already exists'}), 400
-        router.name = data['name']
-    
-    if 'router_ip' in data:
-        if Router.query.filter(Router.id != router_id, Router.router_ip == data['router_ip']).first():
-            return jsonify({'error': 'Router with this IP already exists'}), 400
-        router.router_ip = data['router_ip']
-    
-    if 'router_type' in data:
-        router.router_type = data['router_type']
-    
-    if 'description' in data:
-        router.description = data['description']
-    
-    db.session.commit()
-    
-    return jsonify({'message': 'Router updated successfully', 'router': router.to_dict()}), 200
+    return jsonify({'message': 'Router added successfully', 'router': router.to_dict()}), 201
 
 @app.route('/api/routers/<int:router_id>', methods=['DELETE'])
 @login_required
@@ -395,6 +310,7 @@ def api_update_router(router_id):
 def api_delete_router(router_id):
     """Delete a router"""
     router = Router.query.get_or_404(router_id)
+    router_name = router.name
     
     # Check if router has interfaces with sites
     for interface in router.interfaces:
@@ -404,6 +320,7 @@ def api_delete_router(router_id):
     db.session.delete(router)
     db.session.commit()
     
+    log_activity('delete_router', 'router', router_id, router_name)
     return jsonify({'message': 'Router deleted successfully'}), 200
 
 # Interface Management Routes
@@ -447,9 +364,9 @@ def api_get_interfaces():
 
 @app.route('/api/interfaces', methods=['POST'])
 @login_required
-@permission_required('interfaces.create')
-def api_create_interface():
-    """Create a new interface"""
+@permission_required('interfaces.add')
+def api_add_interface():
+    """Add a new interface"""
     data = request.json
     router_id = data.get('router_id')
     name = data.get('name')
@@ -470,10 +387,10 @@ def api_create_interface():
     db.session.add(interface)
     db.session.commit()
     
-    log_activity('create_interface', 'interface', interface.id, interface.name,
+    log_activity('add_interface', 'interface', interface.id, interface.name,
                 router=router.name, interface=interface.name)
     
-    return jsonify({'message': 'Interface created successfully', 'interface': interface.to_dict()}), 201
+    return jsonify({'message': 'Interface added successfully', 'interface': interface.to_dict()}), 201
 
 @app.route('/api/interfaces/<int:interface_id>', methods=['DELETE'])
 @login_required
@@ -486,11 +403,14 @@ def api_delete_interface(interface_id):
     if interface.sites:
         return jsonify({'error': 'Cannot delete interface with assigned sites'}), 400
     
-    router_name = interface.router.name
+    router = interface.router
+    router_name = router.name if router else None
     interface_name = interface.name
     db.session.delete(interface)
     db.session.commit()
     
+    log_activity('delete_interface', 'interface', interface_id, interface_name,
+                router=router_name, interface=interface_name)
     return jsonify({'message': 'Interface deleted successfully'}), 200
 
 # VLAN Management Routes (Predefined VLANs)
@@ -575,9 +495,9 @@ def api_get_vlans():
 
 @app.route('/api/vlans', methods=['POST'])
 @login_required
-@permission_required('vlans.create')
-def api_create_vlan():
-    """Create a VLAN (pool-based, not tied to interface, can be reused)"""
+@permission_required('vlans.add')
+def api_add_vlan():
+    """Add a VLAN (pool-based, not tied to interface, can be reused)"""
     data = request.json
     vlan_id = data.get('vlan_id')
     technology = data.get('technology')
@@ -754,7 +674,7 @@ def api_create_vlan():
 
     # Log single activity summarizing the bulk creation
     if created:
-        log_activity('create_vlan', 'vlan', created[0].id, 
+        log_activity('add_vlan', 'vlan', created[0].id, 
                     f'Created {len(created)} VLAN(s)' + (f' with {len(created_om)} OM pair(s)' if created_om else ''))
 
     result = {
@@ -777,6 +697,7 @@ def api_create_vlan():
 def api_delete_vlan(vlan_id):
     """Delete a VLAN (cannot delete if assigned to any site)"""
     vlan = VLAN.query.get_or_404(vlan_id)
+    vlan_info = f"VLAN {vlan.vlan_id} ({vlan.technology})"
     
     # Check if VLAN is assigned to any site
     if vlan.sites:
@@ -784,6 +705,8 @@ def api_delete_vlan(vlan_id):
     
     db.session.delete(vlan)
     db.session.commit()
+    
+    log_activity('delete_vlan', 'vlan', vlan_id, vlan_info)
     
     return jsonify({'message': 'VLAN deleted successfully'}), 200
 
@@ -868,9 +791,9 @@ def api_get_ips():
 
 @app.route('/api/ips', methods=['POST'])
 @login_required
-@permission_required('ips.create')
-def api_create_ip():
-    """Create a new IP address or generate IPs from subnet"""
+@permission_required('ips.add')
+def api_add_ip():
+    """Add a new IP address or generate IPs from subnet"""
     data = request.json
     add_method = data.get('add_method', 'single')
     technology = data.get('technology')
@@ -1061,11 +984,11 @@ def api_create_ip():
             db.session.commit()
             
             # Log activity for bulk creation
-            log_activity('create_ip', 'ip', created_ips[0].id if created_ips else None, 
+            log_activity('add_ip', 'ip', created_ips[0].id if created_ips else None, 
                         f'Created {len(created_ips)} IPs from {num_subnets} subnets (base: {base_subnet})' + (f' with {len(created_om_ips)} OM pairs' if created_om_ips else ''))
             
             result = {
-                'message': f'Successfully created {len(created_ips)} IP addresses from {num_subnets} subnets' + (' (with OM pairs)' if created_om_ips else ''),
+                'message': f'Successfully added {len(created_ips)} IP addresses from {num_subnets} subnets' + (' (with OM pairs)' if created_om_ips else ''),
                 'count': len(created_ips),
                 'num_subnets': num_subnets,
                 'ips': [ip.to_dict() for ip in created_ips[:10]]  # Return first 10 for preview
@@ -1184,11 +1107,11 @@ def api_create_ip():
             db.session.commit()
             
             # Log activity for bulk creation
-            log_activity('create_ip', 'ip', created_ips[0].id if created_ips else None, 
+            log_activity('add_ip', 'ip', created_ips[0].id if created_ips else None, 
                         f'Created {len(created_ips)} IPs from subnet {subnet_cidr}' + (f' with {len(created_om_ips)} OM pairs' if created_om_ips else ''))
             
             result = {
-                'message': f'Successfully created {len(created_ips)} IP addresses from subnet {subnet_cidr}' + (' (with OM pairs)' if created_om_ips else ''),
+                'message': f'Successfully added {len(created_ips)} IP addresses from subnet {subnet_cidr}' + (' (with OM pairs)' if created_om_ips else ''),
                 'count': len(created_ips),
                 'ips': [ip.to_dict() for ip in created_ips[:10]]  # Return first 10 for preview
             }
@@ -1257,11 +1180,11 @@ def api_create_ip():
         
         db.session.commit()
         
-        log_activity('create_ip', 'ip', service_ip.id, 
+        log_activity('add_ip', 'ip', service_ip.id, 
                     f'Created gateway {gateway_address}' + (f' with OM pair {om_gateway_address}' if create_pair else ''))
         
         result = {
-            'message': 'IP created successfully' + (' (with OM pair)' if create_pair else ''),
+            'message': 'IP added successfully' + (' (with OM pair)' if create_pair else ''),
             'ip': service_ip.to_dict()
         }
         if om_ip:
@@ -1353,13 +1276,15 @@ def api_delete_ip(ip_id):
     """Delete an IP"""
     ip = IP.query.get_or_404(ip_id)
     
-    # Check if IP is assigned to a site
-    if ip.sites:
+    # Check if IP is assigned to a site (check both service and OM relationships)
+    if ip.sites_service or ip.sites_om:
         return jsonify({'error': 'Cannot delete IP assigned to a site'}), 400
     
+    ip_address = ip.ip_address
     db.session.delete(ip)
     db.session.commit()
     
+    log_activity('delete_ip', 'ip', ip_id, ip_address)
     return jsonify({'message': 'IP deleted successfully'}), 200
 
 @app.route('/api/ips/bulk-delete', methods=['POST'])
@@ -1378,12 +1303,13 @@ def api_bulk_delete_ips():
         found_ids = {ip.id for ip in ips}
         missing_ids = [i for i in ip_ids if i not in found_ids]
 
-        # Separate deletable from protected (assigned)
-        deletable = [ip for ip in ips if not ip.sites]
-        protected = [ip for ip in ips if ip.sites]
+        # Separate deletable from protected (assigned - check both service and OM relationships)
+        deletable = [ip for ip in ips if not (ip.sites_service or ip.sites_om)]
+        protected = [ip for ip in ips if (ip.sites_service or ip.sites_om)]
 
         # Delete in-session
         for ip in deletable:
+            log_activity('delete_ip', 'ip', ip.id, ip.ip_address)
             db.session.delete(ip)
         db.session.commit()
 
@@ -1395,9 +1321,9 @@ def api_bulk_delete_ips():
             'missing_ids': missing_ids
         })
     except Exception as e:
-        app.logger.error(f'Error in bulk delete IPs: {str(e)}', exc_info=True)
+        app.logger.error(f'Error in delete IPs: {str(e)}', exc_info=True)
         db.session.rollback()
-        return jsonify({'error': 'Failed to bulk delete IPs'}), 500
+        return jsonify({'error': f'Failed to delete IPs: {str(e)}'}), 500
 # Vendor Management Routes
 @app.route('/vendors')
 @login_required
@@ -1432,9 +1358,9 @@ def api_get_vendors():
 
 @app.route('/api/vendors', methods=['POST'])
 @login_required
-@permission_required('vendors.create')
-def api_create_vendor():
-    """Create a new vendor"""
+@permission_required('vendors.add')
+def api_add_vendor():
+    """Add a new vendor"""
     data = request.json
     name = data.get('name')
     
@@ -1448,26 +1374,9 @@ def api_create_vendor():
     db.session.add(vendor)
     db.session.commit()
     
-    log_activity('create_vendor', 'vendor', vendor.id, vendor.name)
+    log_activity('add_vendor', 'vendor', vendor.id, vendor.name)
     
-    return jsonify({'message': 'Vendor created successfully', 'vendor': vendor.to_dict()}), 201
-
-@app.route('/api/vendors/<int:vendor_id>', methods=['PUT'])
-@login_required
-@permission_required('vendors.update')
-def api_update_vendor(vendor_id):
-    """Update a vendor"""
-    vendor = Vendor.query.get_or_404(vendor_id)
-    data = request.json
-    
-    if 'name' in data:
-        if Vendor.query.filter(Vendor.id != vendor_id, Vendor.name == data['name']).first():
-            return jsonify({'error': 'Vendor with this name already exists'}), 400
-        vendor.name = data['name']
-    
-    db.session.commit()
-    
-    return jsonify({'message': 'Vendor updated successfully', 'vendor': vendor.to_dict()}), 200
+    return jsonify({'message': 'Vendor added successfully', 'vendor': vendor.to_dict()}), 201
 
 @app.route('/api/vendors/<int:vendor_id>', methods=['DELETE'])
 @login_required
@@ -1475,6 +1384,7 @@ def api_update_vendor(vendor_id):
 def api_delete_vendor(vendor_id):
     """Delete a vendor"""
     vendor = Vendor.query.get_or_404(vendor_id)
+    vendor_name = vendor.name
     
     # Check if vendor is used by any IPs, VLANs, or Sites
     if vendor.ips or vendor.vlans or vendor.sites:
@@ -1482,6 +1392,8 @@ def api_delete_vendor(vendor_id):
     
     db.session.delete(vendor)
     db.session.commit()
+    
+    log_activity('delete_vendor', 'vendor', vendor_id, vendor_name)
     
     return jsonify({'message': 'Vendor deleted successfully'}), 200
 
@@ -1630,7 +1542,7 @@ def api_get_sites():
 
 @app.route('/api/sites/config', methods=['POST'])
 @login_required
-@permission_required('sites.view')
+@permission_required('sites.generate_config')
 def api_generate_site_configs():
     """Generate configuration blocks for selected sites."""
     try:
@@ -1679,9 +1591,9 @@ def api_generate_site_configs():
 
 @app.route('/api/sites', methods=['POST'])
 @login_required
-@permission_required('sites.create')
-def api_create_site():
-    """Create a new site with automatic IP and VLAN assignment"""
+@permission_required('sites.add')
+def api_add_site():
+    """Add a new site with automatic IP and VLAN assignment"""
     try:
         data = request.json
         site_id = data.get('site_id')
@@ -1936,7 +1848,7 @@ def api_create_site():
         
         try:
             db.session.commit()
-            app.logger.info(f'Successfully created {len(created_sites)} site(s) for site_id={site_id}, technologies={tech_names}')
+            app.logger.info(f'Successfully added {len(created_sites)} site(s) for site_id={site_id}, technologies={tech_names}')
         except Exception as e:
             app.logger.error(f'Error committing site creation to database: {str(e)}', exc_info=True)
             db.session.rollback()
@@ -1953,12 +1865,12 @@ def api_create_site():
                 app.logger.error(f'Error logging activity for site {site.id}: {str(e)}', exc_info=True)
         
         return jsonify({
-            'message': f'Successfully created {len(created_sites)} site(s) for {len(tech_names)} technology/technologies',
+            'message': f'Successfully added {len(created_sites)} site(s) for {len(tech_names)} technology/technologies',
             'sites': [s.to_dict() for s in created_sites],
             'count': len(created_sites)
         }), 201
     except Exception as e:
-        app.logger.error(f'Unexpected error in api_create_site: {str(e)}', exc_info=True)
+        app.logger.error(f'Unexpected error in api_add_site: {str(e)}', exc_info=True)
         db.session.rollback()
         return jsonify({'error': 'An unexpected error occurred while creating the site'}), 500
 
@@ -2741,8 +2653,6 @@ def api_get_users():
         'users': [{
             'id': u.id,
             'username': u.username,
-            # Legacy string role (e.g., 'admin', 'user'); kept for backward compatibility
-            'role': u.role if u.role else None,
             'role_id': u.role_id,
             'role_name': u.get_role_name(),
             'created_at': u.created_at.isoformat() if u.created_at else None
@@ -2755,12 +2665,11 @@ def api_get_users():
 @app.route('/api/users', methods=['POST'])
 @login_required
 @permission_required('users.manage')
-def api_create_user():
-    """Create a new user"""
+def api_add_user():
+    """Add a new user"""
     data = request.json
     username = data.get('username')
     password = data.get('password')
-    role = data.get('role', 'engineer')
     role_id = data.get('role_id')
     
     if not username or not password:
@@ -2771,21 +2680,14 @@ def api_create_user():
     
     # Create user
     user = User(username=username)
-    # Prefer role_id when provided (new RBAC)
+    # role_id is required
     if role_id:
         role_obj = Role.query.get(role_id)
         if not role_obj:
             return jsonify({'error': 'Invalid role'}), 400
         user.role_id = role_obj.id
-        # Keep a legacy string role mainly for backward compatibility; permissions come from Role.
-        user.role = 'admin' if role_obj.has_permission('admin.full_access') else 'user'
     else:
-        # Fallback to simple string-based role for backward compatibility.
-        # Only 'admin' is accepted explicitly; anything else is invalid.
-        if role and str(role).lower() == 'admin':
-            user.role = 'admin'
-        else:
-            return jsonify({'error': 'Invalid role'}), 400
+        return jsonify({'error': 'role_id is required'}), 400
     
     user.set_password(password)
     db.session.add(user)
@@ -2798,7 +2700,7 @@ def api_create_user():
     except Exception as e:
         app.logger.error(f'Error creating PasswordState for user {username}: {str(e)}', exc_info=True)
     
-    return jsonify({'message': 'User created successfully'}), 201
+    return jsonify({'message': 'User added successfully'}), 201
 
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
 @login_required
@@ -2808,34 +2710,25 @@ def api_update_user(user_id):
     user = User.query.get_or_404(user_id)
     data = request.json or {}
     try:
-        # Update role or role_id
-        new_role_code = data.get('role')
+        # Update role_id
         new_role_id = data.get('role_id')
-        if new_role_id is not None or new_role_code:
-            if new_role_id:
-                role_obj = Role.query.get(new_role_id)
-                if not role_obj:
-                    return jsonify({'error': 'Invalid role'}), 400
-                # Prevent removing own admin permission
-                if user.id == current_user.id and not role_obj.has_permission('admin.full_access'):
-                    return jsonify({'error': 'You cannot remove admin access from yourself'}), 400
-                user.role_id = role_obj.id
-                # Keep legacy string role in sync at a high level
-                user.role = 'admin' if role_obj.has_permission('admin.full_access') else (user.role or 'user')
-            else:
-                # Simple string-based fallback (only allow admin via this path)
-                if not new_role_code or str(new_role_code).lower() != 'admin':
-                    return jsonify({'error': 'Invalid role'}), 400
-                if user.id == current_user.id and (user.role or '').lower() != 'admin':
-                    return jsonify({'error': 'You cannot change your own role from admin'}), 400
-                user.role = 'admin'
-                user.role_id = None
+        if new_role_id is not None:
+            role_obj = Role.query.get(new_role_id)
+            if not role_obj:
+                return jsonify({'error': 'Invalid role'}), 400
+            # Prevent removing own admin permission (check if has both users.manage and roles.manage)
+            has_admin_perms = role_obj.has_permission('users.manage') and role_obj.has_permission('roles.manage')
+            if user.id == current_user.id and not has_admin_perms:
+                return jsonify({'error': 'You cannot remove admin access from yourself'}), 400
+            user.role_id = role_obj.id
         # Update password (optional)
         if 'password' in data and data['password']:
             if len(data['password']) < 6:
                 return jsonify({'error': 'Password must be at least 6 characters long'}), 400
             user.set_password(data['password'])
         db.session.commit()
+        
+        log_activity('update_user', 'user', user_id, user.username)
         return jsonify({'message': 'User updated successfully'}), 200
     except Exception as e:
         app.logger.error(f'Error updating user {user_id}: {str(e)}', exc_info=True)
@@ -2871,8 +2764,11 @@ def api_delete_user(user_id):
             db.session.rollback()
             return jsonify({'error': 'Failed to delete user activity logs'}), 500
         
+        user_username = user.username
         db.session.delete(user)
         db.session.commit()
+        
+        log_activity('delete_user', 'user', user_id, user_username)
     except Exception as e:
         app.logger.error(f'Error deleting user {user_id}: {str(e)}', exc_info=True)
         db.session.rollback()
@@ -2928,8 +2824,8 @@ def api_get_permissions():
 @app.route('/api/roles', methods=['POST'])
 @login_required
 @permission_required('roles.manage')
-def api_create_role():
-    """Create a new role"""
+def api_add_role():
+    """Add a new role"""
     try:
         data = request.json
         name = data.get('name', '').strip()
@@ -2954,7 +2850,7 @@ def api_create_role():
         db.session.commit()
         
         app.logger.info(f'Role "{name}" created by {current_user.username}')
-        return jsonify({'message': 'Role created successfully', 'role': role.to_dict()}), 201
+        return jsonify({'message': 'Role added successfully', 'role': role.to_dict()}), 201
     except IntegrityError as e:
         app.logger.error(f'Integrity error creating role: {str(e)}', exc_info=True)
         db.session.rollback()
@@ -3004,6 +2900,7 @@ def api_update_role(role_id):
         role.updated_at = datetime.utcnow()
         db.session.commit()
         
+        log_activity('update_role', 'role', role_id, name)
         app.logger.info(f'Role "{name}" updated by {current_user.username}')
         return jsonify({'message': 'Role updated successfully', 'role': role.to_dict()}), 200
     except IntegrityError as e:
@@ -3117,6 +3014,7 @@ def api_admin_reset_password(user_id):
             state.must_change = True
             state.last_changed = None
         db.session.commit()
+        log_activity('reset_password', 'user', user_id, user.username)
         return jsonify({'message': 'Password reset successfully; user must change it at next login'}), 200
     except Exception as e:
         app.logger.error(f'Error resetting password for user {user.username}: {str(e)}', exc_info=True)
@@ -3133,7 +3031,9 @@ def api_get_activity_logs():
     
     query = ActivityLog.query
     
-    if not current_user.has_permission('admin.full_access'):
+    # Only show all logs if user has both users.manage and roles.manage (admin)
+    has_admin_perms = current_user.has_permission('users.manage') and current_user.has_permission('roles.manage')
+    if not has_admin_perms:
         query = query.filter_by(user_id=current_user.id)
     
     pagination = query.order_by(ActivityLog.timestamp.desc()).paginate(
@@ -3249,75 +3149,115 @@ def init_db():
     """Initialize database and create default admin user"""
 def init_permissions():
     """Initialize default permissions"""
+    import json
     permissions_data = [
-        # Admin permissions
-        {'name': 'Full Admin Access', 'code': 'admin.full_access', 'description': 'Full administrative access to all features', 'category': 'admin'},
-        {'name': 'Manage Users', 'code': 'users.manage', 'description': 'Create, edit, and delete users', 'category': 'users'},
-        {'name': 'Manage Roles', 'code': 'roles.manage', 'description': 'Create, edit, and delete roles', 'category': 'admin'},
+        # User management permissions
+        {'name': 'Manage Users', 'code': 'users.manage', 'description': 'Create, edit, and delete users', 'category': 'users', 'required_permissions': ['roles.manage']},
+        
+        # Roles & Permissions
+        {'name': 'Manage Roles', 'code': 'roles.manage', 'description': 'Create, edit, and delete roles', 'category': 'roles & permissions', 'required_permissions': []},
         
         # View permissions
-        {'name': 'View Dashboard', 'code': 'dashboard.view', 'description': 'View dashboard and statistics', 'category': 'dashboard'},
-        {'name': 'View Activity Logs', 'code': 'logs.view', 'description': 'View activity logs', 'category': 'logs'},
+        {'name': 'View Dashboard', 'code': 'dashboard.view', 'description': 'View dashboard and statistics', 'category': 'dashboard', 'required_permissions': []},
+        {'name': 'View Activity Logs', 'code': 'logs.view', 'description': 'View activity logs', 'category': 'logs', 'required_permissions': []},
         
         # Router permissions
-        {'name': 'View Routers', 'code': 'routers.view', 'description': 'View router list and details', 'category': 'routers'},
-        {'name': 'Create Routers', 'code': 'routers.create', 'description': 'Create new routers', 'category': 'routers'},
-        {'name': 'Update Routers', 'code': 'routers.update', 'description': 'Update existing routers', 'category': 'routers'},
-        {'name': 'Delete Routers', 'code': 'routers.delete', 'description': 'Delete routers', 'category': 'routers'},
+        {'name': 'View Routers', 'code': 'routers.view', 'description': 'View router list and details', 'category': 'routers', 'required_permissions': []},
+        {'name': 'Add Routers', 'code': 'routers.add', 'description': 'Add new routers', 'category': 'routers', 'required_permissions': ['routers.view']},
+        {'name': 'Delete Routers', 'code': 'routers.delete', 'description': 'Delete routers', 'category': 'routers', 'required_permissions': ['routers.view']},
+        {'name': 'Export Routers', 'code': 'routers.export', 'description': 'Export routers to Excel', 'category': 'routers', 'required_permissions': ['routers.view']},
         
         # Interface permissions
-        {'name': 'View Interfaces', 'code': 'interfaces.view', 'description': 'View interface list and details', 'category': 'interfaces'},
-        {'name': 'Create Interfaces', 'code': 'interfaces.create', 'description': 'Create new interfaces', 'category': 'interfaces'},
-        {'name': 'Delete Interfaces', 'code': 'interfaces.delete', 'description': 'Delete interfaces', 'category': 'interfaces'},
+        {'name': 'View Interfaces', 'code': 'interfaces.view', 'description': 'View interface list and details', 'category': 'interfaces', 'required_permissions': ['routers.view']},
+        {'name': 'Add Interfaces', 'code': 'interfaces.add', 'description': 'Add new interfaces', 'category': 'interfaces', 'required_permissions': ['routers.view', 'interfaces.view']},
+        {'name': 'Delete Interfaces', 'code': 'interfaces.delete', 'description': 'Delete interfaces', 'category': 'interfaces', 'required_permissions': ['interfaces.view']},
+        {'name': 'Export Interfaces', 'code': 'interfaces.export', 'description': 'Export interfaces to Excel', 'category': 'interfaces', 'required_permissions': ['interfaces.view']},
         
         # VLAN permissions
-        {'name': 'View VLANs', 'code': 'vlans.view', 'description': 'View VLAN list and details', 'category': 'vlans'},
-        {'name': 'Create VLANs', 'code': 'vlans.create', 'description': 'Create new VLANs', 'category': 'vlans'},
-        {'name': 'Delete VLANs', 'code': 'vlans.delete', 'description': 'Delete VLANs', 'category': 'vlans'},
+        {'name': 'View VLANs', 'code': 'vlans.view', 'description': 'View VLAN list and details', 'category': 'vlans', 'required_permissions': []},
+        {'name': 'Add VLANs', 'code': 'vlans.add', 'description': 'Add new VLANs', 'category': 'vlans', 'required_permissions': ['technologies.view', 'vendors.view', 'vlans.view']},
+        {'name': 'Delete VLANs', 'code': 'vlans.delete', 'description': 'Delete VLANs', 'category': 'vlans', 'required_permissions': ['vlans.view']},
+        {'name': 'Export VLANs', 'code': 'vlans.export', 'description': 'Export VLANs to Excel', 'category': 'vlans', 'required_permissions': ['vlans.view']},
         
         # IP permissions
-        {'name': 'View IPs', 'code': 'ips.view', 'description': 'View IP address list and details', 'category': 'ips'},
-        {'name': 'Create IPs', 'code': 'ips.create', 'description': 'Create new IP addresses', 'category': 'ips'},
-        {'name': 'Delete IPs', 'code': 'ips.delete', 'description': 'Delete IP addresses (including bulk delete)', 'category': 'ips'},
+        {'name': 'View IPs', 'code': 'ips.view', 'description': 'View IP address list and details', 'category': 'ips', 'required_permissions': []},
+        {'name': 'Add IPs', 'code': 'ips.add', 'description': 'Add new IP addresses', 'category': 'ips', 'required_permissions': ['technologies.view', 'vendors.view', 'ips.view']},
+        {'name': 'Delete IPs', 'code': 'ips.delete', 'description': 'Delete IP addresses', 'category': 'ips', 'required_permissions': ['ips.view']},
+        {'name': 'Export IPs', 'code': 'ips.export', 'description': 'Export IPs to Excel', 'category': 'ips', 'required_permissions': ['ips.view']},
         
         # Site permissions
-        {'name': 'View Sites', 'code': 'sites.view', 'description': 'View site list and details', 'category': 'sites'},
-        {'name': 'Create Sites', 'code': 'sites.create', 'description': 'Create new sites', 'category': 'sites'},
-        {'name': 'Update Sites', 'code': 'sites.update', 'description': 'Update existing sites', 'category': 'sites'},
-        {'name': 'Delete Sites', 'code': 'sites.delete', 'description': 'Delete sites', 'category': 'sites'},
-        {'name': 'Release Sites', 'code': 'sites.release', 'description': 'Release assigned sites', 'category': 'sites'},
-        {'name': 'Transfer Sites', 'code': 'sites.transfer', 'description': 'Transfer sites between vendors', 'category': 'sites'},
-        {'name': 'Import Sites', 'code': 'sites.import', 'description': 'Import sites from Excel', 'category': 'sites'},
-        {'name': 'Export Sites', 'code': 'sites.export', 'description': 'Export sites to Excel', 'category': 'sites'},
+        {'name': 'View Sites', 'code': 'sites.view', 'description': 'View site list and details', 'category': 'sites', 'required_permissions': []},
+        {'name': 'Add Sites', 'code': 'sites.add', 'description': 'Add new sites', 'category': 'sites', 'required_permissions': ['vendors.view', 'technologies.view', 'routers.view', 'interfaces.view', 'sites.view']},
+        {'name': 'Release Sites', 'code': 'sites.release', 'description': 'Release assigned sites', 'category': 'sites', 'required_permissions': ['sites.view']},
+        {'name': 'Transfer Sites', 'code': 'sites.transfer', 'description': 'Transfer sites between vendors', 'category': 'sites', 'required_permissions': ['sites.view']},
+        {'name': 'Import Sites', 'code': 'sites.import', 'description': 'Import sites from Excel', 'category': 'sites', 'required_permissions': ['sites.view']},
+        {'name': 'Export Sites', 'code': 'sites.export', 'description': 'Export sites to Excel', 'category': 'sites', 'required_permissions': ['sites.view']},
+        {'name': 'Generate Site Config', 'code': 'sites.generate_config', 'description': 'Generate configuration blocks for sites', 'category': 'sites', 'required_permissions': ['sites.view']},
         
         # Vendor permissions
-        {'name': 'View Vendors', 'code': 'vendors.view', 'description': 'View vendor list and details', 'category': 'vendors'},
-        {'name': 'Create Vendors', 'code': 'vendors.create', 'description': 'Create new vendors', 'category': 'vendors'},
-        {'name': 'Update Vendors', 'code': 'vendors.update', 'description': 'Update existing vendors', 'category': 'vendors'},
-        {'name': 'Delete Vendors', 'code': 'vendors.delete', 'description': 'Delete vendors', 'category': 'vendors'},
+        {'name': 'View Vendors', 'code': 'vendors.view', 'description': 'View vendor list and details', 'category': 'vendors', 'required_permissions': []},
+        {'name': 'Add Vendors', 'code': 'vendors.add', 'description': 'Add new vendors', 'category': 'vendors', 'required_permissions': ['vendors.view']},
+        {'name': 'Delete Vendors', 'code': 'vendors.delete', 'description': 'Delete vendors', 'category': 'vendors', 'required_permissions': ['vendors.view']},
+        {'name': 'Export Vendors', 'code': 'vendors.export', 'description': 'Export vendors to Excel', 'category': 'vendors', 'required_permissions': ['vendors.view']},
         
         # Technology permissions
-        {'name': 'View Technologies', 'code': 'technologies.view', 'description': 'View technology list and details', 'category': 'technologies'},
-        {'name': 'Create Technologies', 'code': 'technologies.create', 'description': 'Create new technologies', 'category': 'technologies'},
-        {'name': 'Update Technologies', 'code': 'technologies.update', 'description': 'Update existing technologies', 'category': 'technologies'},
-        {'name': 'Delete Technologies', 'code': 'technologies.delete', 'description': 'Delete technologies', 'category': 'technologies'},
+        {'name': 'View Technologies', 'code': 'technologies.view', 'description': 'View technology list and details', 'category': 'technologies', 'required_permissions': []},
+        {'name': 'Add Technologies', 'code': 'technologies.add', 'description': 'Add new technologies', 'category': 'technologies', 'required_permissions': ['technologies.view']},
+        {'name': 'Delete Technologies', 'code': 'technologies.delete', 'description': 'Delete technologies', 'category': 'technologies', 'required_permissions': ['technologies.view']},
+        {'name': 'Export Technologies', 'code': 'technologies.export', 'description': 'Export technologies to Excel', 'category': 'technologies', 'required_permissions': ['technologies.view']},
         
         # Utility permissions
-        {'name': 'Use Subnet Calculator', 'code': 'utils.subnet_calculator', 'description': 'Use subnet calculator tool', 'category': 'utils'},
+        {'name': 'Use Subnet Calculator', 'code': 'utils.subnet_calculator', 'description': 'Use subnet calculator tool', 'category': 'utils', 'required_permissions': []},
     ]
     
-    # First, ensure any legacy/deprecated permissions are cleaned up
-    # e.g., old 'ips.bulk_delete' permission
+    # Build set of all valid permission codes (from permissions_data and their required_permissions)
+    valid_permission_codes = set()
+    for perm_data in permissions_data:
+        valid_permission_codes.add(perm_data['code'])
+        # Also add any permissions referenced in required_permissions
+        for req_code in perm_data.get('required_permissions', []):
+            valid_permission_codes.add(req_code)
+    
+    # Clean up any permissions in database that are not in permissions_data
+    # Check both the permission code itself and any references in required_permissions
     try:
-        Permission.query.filter_by(code='ips.bulk_delete').delete(synchronize_session=False)
+        all_db_permissions = Permission.query.all()
+        removed_count = 0
+        for db_perm in all_db_permissions:
+            if db_perm.code not in valid_permission_codes:
+                app.logger.info(f'Removing deprecated permission: {db_perm.code} (not found in permissions_data)')
+                db.session.delete(db_perm)
+                removed_count += 1
+        
+        if removed_count > 0:
+            db.session.commit()
+            app.logger.info(f'Cleaned up {removed_count} deprecated permission(s)')
     except Exception as e:
-        app.logger.warning(f'Error cleaning up legacy permission ips.bulk_delete: {str(e)}')
+        app.logger.warning(f'Error cleaning up deprecated permissions: {str(e)}', exc_info=True)
+        db.session.rollback()
     
     for perm_data in permissions_data:
         existing = Permission.query.filter_by(code=perm_data['code']).first()
+        required_perms_json = json.dumps(perm_data.get('required_permissions', []))
+        
         if not existing:
-            permission = Permission(**perm_data)
+            # Create new permission with required_permissions
+            permission = Permission(
+                name=perm_data['name'],
+                code=perm_data['code'],
+                description=perm_data['description'],
+                category=perm_data['category'],
+                required_permissions=required_perms_json
+            )
             db.session.add(permission)
+        else:
+            # Update category if it changed (e.g., roles.manage from 'admin' to 'roles')
+            if existing.category != perm_data['category']:
+                existing.category = perm_data['category']
+            # Update required_permissions if it changed
+            if existing.required_permissions != required_perms_json:
+                existing.required_permissions = required_perms_json
+                app.logger.info(f'Updated category for permission {perm_data["code"]} from {existing.category} to {perm_data["category"]}')
     
     db.session.commit()
     app.logger.info('Default permissions initialized')
@@ -3339,162 +3279,27 @@ def init_default_roles():
             admin_role.is_system = True
             db.session.commit()
             app.logger.info('Admin role marked as system role')
-    
-    # Engineer role - write access except user management (not system, can be deleted if no users)
-    engineer_role = Role.query.filter_by(name='Engineer').first()
-    if not engineer_role:
-        # Only create Engineer role if there are users using the legacy 'engineer' string role
-        engineer_users_count = User.query.filter_by(role='engineer').count()
-        if engineer_users_count > 0:
-            engineer_role = Role(name='Engineer', description='Can create, edit, and delete network entities', is_system=False)
-            engineer_permissions = Permission.query.filter(
-                ~Permission.code.in_(['admin.full_access', 'users.manage', 'roles.manage'])
-            ).all()
-            engineer_role.permissions = engineer_permissions
-            db.session.add(engineer_role)
-            db.session.commit()
-            app.logger.info(f'Engineer role created (mapped for {engineer_users_count} existing ENGINEER user(s))')
-        else:
-            app.logger.info('No existing users with ENGINEER role; skipping Engineer role creation')
-    else:
-        # Ensure Engineer role is not marked as system (can be deleted)
-        if engineer_role.is_system:
-            engineer_role.is_system = False
-            db.session.commit()
-            app.logger.info('Engineer role marked as non-system role')
-    
-    # Read-only role - view only (not system, can be deleted if no users)
-    read_only_role = Role.query.filter_by(name='Read Only').first()
-    if not read_only_role:
-        # Only create Read Only role if there are users using the legacy 'read_only' string role
-        ro_users_count = User.query.filter_by(role='read_only').count()
-        if ro_users_count > 0:
-            read_only_role = Role(name='Read Only', description='View-only access to all data', is_system=False)
-            view_permissions = Permission.query.filter(
-                Permission.code.in_(['dashboard.view', 'logs.view', 'routers.view', 'interfaces.view', 
-                                    'vlans.view', 'ips.view', 'sites.view', 'vendors.view', 
-                                    'technologies.view', 'utils.subnet_calculator'])
-            ).all()
-            read_only_role.permissions = view_permissions
-            db.session.add(read_only_role)
-            db.session.commit()
-            app.logger.info(f'Read Only role created (mapped for {ro_users_count} existing READ_ONLY user(s))')
-        else:
-            app.logger.info('No existing users with READ_ONLY role; skipping Read Only role creation')
-    else:
-        # Ensure Read Only role is not marked as system (can be deleted)
-        if read_only_role.is_system:
-            read_only_role.is_system = False
-            db.session.commit()
-            app.logger.info('Read Only role marked as non-system role')
 
-def migrate_database():
-    """Migrate database schema - add new columns if they don't exist"""
-    try:
-        # Check if role_id column exists in users table
-        try:
-            inspector = inspect(db.engine)
-            columns = [col['name'] for col in inspector.get_columns('users')]
-            
-            if 'role_id' not in columns:
-                app.logger.info('Adding role_id column to users table...')
-                try:
-                    db.session.execute(text('ALTER TABLE users ADD COLUMN role_id INTEGER'))
-                    db.session.commit()
-                    app.logger.info('role_id column added successfully')
-                except Exception as add_error:
-                    db.session.rollback()
-                    # Column might already exist (race condition or already migrated)
-                    error_msg = str(add_error).lower()
-                    if 'duplicate column' in error_msg or 'already exists' in error_msg:
-                        app.logger.info('role_id column already exists, skipping...')
-                    else:
-                        app.logger.warning(f'Unexpected error adding role_id column: {str(add_error)}')
-        except Exception as e:
-            # If inspection fails, try to add the column anyway (it will fail gracefully if it exists)
-            app.logger.warning(f'Could not inspect users table: {str(e)}. Attempting to add column...')
-            try:
-                db.session.execute(text('ALTER TABLE users ADD COLUMN role_id INTEGER'))
-                db.session.commit()
-                app.logger.info('role_id column added successfully')
-            except Exception as e2:
-                db.session.rollback()
-                # Column might already exist, which is fine
-                error_msg = str(e2).lower()
-                if 'duplicate column' in error_msg or 'already exists' in error_msg:
-                    app.logger.info('role_id column already exists, skipping...')
-                else:
-                    app.logger.warning(f'Could not add role_id column: {str(e2)}')
-        
-        # Create new tables if they don't exist
-        db.create_all()
-        
-    except Exception as e:
-        app.logger.error(f'Error during database migration: {str(e)}', exc_info=True)
-        # If migration fails, still try to create tables (they might already exist)
-        try:
-            db.create_all()
-        except Exception as e2:
-            app.logger.error(f'Error creating tables: {str(e2)}', exc_info=True)
-
-def migrate_existing_users_to_roles():
-    """Migrate existing users to use role_id based on their legacy role string"""
-    try:
-        # Get Admin role
-        admin_role = Role.query.filter_by(name='Admin').first()
-        if not admin_role:
-            return  # Can't migrate without Admin role
-        
-        # Update admin users
-        admin_users = User.query.filter(db.func.lower(User.role) == 'admin').filter(User.role_id.is_(None)).all()
-        for user in admin_users:
-            user.role_id = admin_role.id
-            app.logger.info(f'Migrated admin user {user.username} to Admin role')
-        
-        # Get Engineer role if it exists
-        engineer_role = Role.query.filter_by(name='Engineer').first()
-        if engineer_role:
-            engineer_users = User.query.filter(db.func.lower(User.role) == 'engineer').filter(User.role_id.is_(None)).all()
-            for user in engineer_users:
-                user.role_id = engineer_role.id
-                app.logger.info(f'Migrated engineer user {user.username} to Engineer role')
-        
-        # Get Read Only role if it exists
-        read_only_role = Role.query.filter_by(name='Read Only').first()
-        if read_only_role:
-            ro_users = User.query.filter(db.func.lower(User.role) == 'read_only').filter(User.role_id.is_(None)).all()
-            for user in ro_users:
-                user.role_id = read_only_role.id
-                app.logger.info(f'Migrated read-only user {user.username} to Read Only role')
-        
-        db.session.commit()
-        app.logger.info('User migration to roles completed')
-    except Exception as e:
-        app.logger.error(f'Error migrating users to roles: {str(e)}', exc_info=True)
-        db.session.rollback()
 
 def init_db():
     """Initialize database and create default admin user"""
     with app.app_context():
-        # Run migration first
-        migrate_database()
+        # Create all database tables
+        app.logger.info('Creating database tables if they do not exist...')
+        db.create_all()
         
         # Initialize permissions and roles
         init_permissions()
         init_default_roles()
         
-        # Migrate existing users to use role_id
-        migrate_existing_users_to_roles()
-        
         # Create default admin user if it doesn't exist
         try:
-            # Check if admin user exists using raw query to avoid role_id issues
-            result = db.session.execute(text("SELECT id FROM users WHERE LOWER(role) = 'admin' LIMIT 1"))
-            admin_user = result.fetchone()
+            # Get Admin role first
+            admin_role = Role.query.filter_by(name='Admin').first()
+            # Check if admin user exists with Admin role
+            admin_user = User.query.filter(User.role_id == admin_role.id).first() if admin_role else None
             
             if not admin_user:
-                # Get Admin role to assign role_id
-                admin_role = Role.query.filter_by(name='Admin').first()
                 if not admin_role:
                     # Admin role should exist from init_default_roles, but if not, create it
                     all_permissions = Permission.query.all()
@@ -3503,7 +3308,7 @@ def init_db():
                     db.session.add(admin_role)
                     db.session.commit()
                 
-                admin = User(username='admin', role='admin', role_id=admin_role.id)
+                admin = User(username='admin', role_id=admin_role.id)
                 admin.set_password('admin')
                 db.session.add(admin)
                 db.session.commit()
@@ -3519,12 +3324,14 @@ def init_db():
             # Fallback: try the normal way after ensuring tables are created
             try:
                 db.create_all()
-                admin_check = User.query.filter(db.func.lower(User.role) == 'admin').first()
+                admin_role = Role.query.filter_by(name='Admin').first()
+                admin_check = User.query.filter(User.role_id == admin_role.id).first() if admin_role else None
                 if not admin_check:
-                    # Get Admin role to assign role_id
-                    admin_role = Role.query.filter_by(name='Admin').first()
+                    # Get Admin role to assign role_id (if not already retrieved)
+                    if not admin_role:
+                        admin_role = Role.query.filter_by(name='Admin').first()
                     if admin_role:
-                        admin = User(username='admin', role='admin', role_id=admin_role.id)
+                        admin = User(username='admin', role_id=admin_role.id)
                         admin.set_password('admin')
                         db.session.add(admin)
                         db.session.commit()
@@ -3538,6 +3345,23 @@ def init_db():
                 app.logger.error(f'Error in fallback admin user creation: {str(e2)}', exc_info=True)
 
 
+# Error Handlers
+@app.errorhandler(404)
+def page_not_found(error):
+    """Handle 404 errors"""
+    app.logger.warning(f'404 error: {request.url}')
+    return render_template('404.html'), 404
+
+
+@app.errorhandler(403)
+def forbidden(error):
+    """Handle 403 errors (permission denied)"""
+    try:
+        username = current_user.username if current_user.is_authenticated else "Anonymous"
+        app.logger.warning(f'403 error: {request.url} - User: {username}')
+    except Exception as e:
+        app.logger.warning(f'403 error: {request.url} - User: Anonymous')
+    return render_template('403.html'), 403
 
 
 if __name__ == '__main__':

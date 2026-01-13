@@ -10,24 +10,23 @@
             <i class="fas fa-network-wired"></i> VLANs
         </h5>
         <div>
-            <select class="form-select form-select-sm d-inline-block me-2" id="techFilter" style="width: auto;">
-                <option value="">All Technologies</option>
-            </select>
             <select class="form-select form-select-sm d-inline-block me-2" id="statusFilter" style="width: auto;">
                 <option value="">All Status</option>
                 <option value="FREE">Free</option>
                 <option value="ASSIGNED">Assigned</option>
             </select>
-            {% if current_user.is_authenticated and (current_user.has_permission('vlans.create') or current_user.has_permission('vlans.delete')) %}
-            {% if current_user.has_permission('vlans.delete') %}
+            {% if current_user.is_authenticated and (current_user.has_permission('vlans.add') or current_user.has_permission('vlans.delete') or current_user.has_permission('vlans.export')) %}
+            {% if current_user.has_permission('vlans.export') %}
             <button class="btn btn-sm btn-outline-success" id="exportVlansBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
+            {% endif %}
+            {% if current_user.has_permission('vlans.delete') %}
             <button class="btn btn-sm btn-danger" id="deleteVlansBtn" style="display: none;">
                 <i class="fas fa-trash"></i> Delete Selected
             </button>
             {% endif %}
-            {% if current_user.has_permission('vlans.create') %}
+            {% if current_user.has_permission('vlans.add') %}
             <button class="btn btn-sm btn-primary" id="addVlanBtn">
                 <i class="fas fa-plus"></i> Add VLAN
             </button>
@@ -46,7 +45,7 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        {% if current_user.is_authenticated and current_user.has_permission('vlans.delete') %}
+                        {% if current_user.is_authenticated and (current_user.has_permission('vlans.delete') or current_user.has_permission('vlans.export')) %}
                         <th><input type="checkbox" id="selectAllVlans" title="Select All"></th>
                         {% endif %}
                         <th>Service VLAN</th>

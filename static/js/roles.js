@@ -101,6 +101,12 @@ function renderPermissions() {
         return;
     }
     
+    // Create a map of permission codes to permission objects for quick lookup
+    const permMap = {};
+    permissions.forEach(p => {
+        permMap[p.code] = p;
+    });
+    
     let html = '';
     for (const [category, perms] of Object.entries(permissionsByCategory)) {
         const categoryTitle = category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ');
@@ -110,20 +116,25 @@ function renderPermissions() {
                     <i class="fas fa-folder me-1"></i> ${escapeHtml(categoryTitle)}
                 </h6>
                 <div class="ms-3">
-                    ${perms.map(perm => `
+                    ${perms.map(perm => {
+                        const warning = getPermissionWarning(perm.code, permMap);
+                        return `
                         <div class="form-check mb-2">
                             <input class="form-check-input permission-checkbox" 
                                    type="checkbox" 
                                    value="${perm.id}" 
                                    id="perm-${perm.id}"
-                                   data-code="${escapeHtml(perm.code)}">
+                                   data-code="${escapeHtml(perm.code)}"
+                                   onchange="checkPermissionDependencies('${escapeHtml(perm.code)}', ${perm.id})">
                             <label class="form-check-label" for="perm-${perm.id}">
                                 <strong>${escapeHtml(perm.name)}</strong>
                                 <br>
                                 <small class="text-muted">${escapeHtml(perm.description || 'No description')}</small>
+                                ${warning ? `<div id="warning-${perm.id}" class="text-warning small mt-1" style="display: none;"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(warning)}</div>` : ''}
                             </label>
                         </div>
-                    `).join('')}
+                    `;
+                    }).join('')}
                 </div>
             </div>
         `;
@@ -132,12 +143,132 @@ function renderPermissions() {
     container.innerHTML = html;
 }
 
+function getPermissionWarning(permCode, permMap) {
+    // Get required permissions from the permission object
+    const perm = permMap[permCode];
+    if (!perm || !perm.required_permissions || perm.required_permissions.length === 0) {
+        return null;
+    }
+    
+    // Build warning message from required permissions
+    const requiredPerms = perm.required_permissions;
+    const permNames = requiredPerms.map(code => {
+        const reqPerm = permMap[code];
+        return reqPerm ? reqPerm.name : code;
+    });
+    
+    if (permNames.length === 1) {
+        return `${permNames[0]} permission must also be selected`;
+    } else if (permNames.length === 2) {
+        return `${permNames.join(' and ')} permissions must also be selected`;
+    } else {
+        return `${permNames.slice(0, -1).join(', ')}, and ${permNames[permNames.length - 1]} permissions must also be selected`;
+    }
+}
+
+// Track visited permissions to prevent infinite recursion
+let checkingPermissions = new Set();
+
+function checkPermissionDependencies(permCode, permId, skipRecursion = false) {
+    // Prevent infinite recursion
+    const permKey = `${permCode}_${permId}`;
+    if (checkingPermissions.has(permKey)) {
+        return;
+    }
+    
+    checkingPermissions.add(permKey);
+    
+    try {
+        const checkbox = document.getElementById(`perm-${permId}`);
+        if (!checkbox) {
+            return;
+        }
+        
+        const warningDiv = document.getElementById(`warning-${permId}`);
+        const isChecked = checkbox.checked;
+        
+        if (!isChecked) {
+            if (warningDiv) warningDiv.style.display = 'none';
+            return;
+        }
+        
+        // Create permission map
+        const permMap = {};
+        permissions.forEach(p => {
+            permMap[p.code] = p;
+        });
+        
+        // Get all checked permissions
+        const checkedPerms = Array.from(document.querySelectorAll('.permission-checkbox:checked'))
+            .map(cb => cb.getAttribute('data-code'));
+        
+        let warnings = [];
+        
+        // Get required permissions from the permission object
+        const perm = permMap[permCode];
+        if (perm && perm.required_permissions && perm.required_permissions.length > 0) {
+            const missing = [];
+            perm.required_permissions.forEach(reqCode => {
+                if (!checkedPerms.includes(reqCode)) {
+                    const reqPerm = permMap[reqCode];
+                    missing.push(reqPerm ? reqPerm.name : reqCode);
+                }
+            });
+            
+            if (missing.length > 0) {
+                if (missing.length === 1) {
+                    warnings.push(`${missing[0]} permission must also be selected`);
+                } else if (missing.length === 2) {
+                    warnings.push(`${missing.join(' and ')} permissions must also be selected`);
+                } else {
+                    warnings.push(`${missing.slice(0, -1).join(', ')}, and ${missing[missing.length - 1]} permissions must also be selected`);
+                }
+            }
+        }
+        
+        const showWarning = warnings.length > 0;
+        const warningText = warnings.join(' | ');
+        
+        if (warningDiv) {
+            if (showWarning) {
+                warningDiv.textContent = `⚠ ${warningText}`;
+                warningDiv.style.display = 'block';
+            } else {
+                warningDiv.style.display = 'none';
+            }
+        }
+        
+        // Re-check all other checked permissions to update their warnings (only if recursion is allowed)
+        if (!skipRecursion) {
+            // Collect all other checked permissions first
+            const otherPermissions = [];
+            document.querySelectorAll('.permission-checkbox').forEach(cb => {
+                const otherPermId = cb.value;
+                const otherPermCode = cb.getAttribute('data-code');
+                if (otherPermId != permId && cb.checked) {
+                    otherPermissions.push({ code: otherPermCode, id: otherPermId });
+                }
+            });
+            
+            // Check each one without recursion
+            otherPermissions.forEach(perm => {
+                checkPermissionDependencies(perm.code, perm.id, true);
+            });
+        }
+    } finally {
+        checkingPermissions.delete(permKey);
+    }
+}
+
 function resetRoleForm() {
     document.getElementById('roleForm').reset();
     document.getElementById('roleId').value = '';
-    // Uncheck all permission checkboxes
+    // Uncheck all permission checkboxes and hide warnings
     document.querySelectorAll('.permission-checkbox').forEach(cb => {
         cb.checked = false;
+        const permId = cb.value;
+        const warningDiv = document.getElementById(`warning-${permId}`);
+        if (warningDiv) warningDiv.style.display = 'none';
     });
 }
 
@@ -157,7 +288,13 @@ function editRole(roleId) {
     // Check the permissions for this role
     const permissionIds = role.permission_ids || [];
     document.querySelectorAll('.permission-checkbox').forEach(cb => {
-        cb.checked = permissionIds.includes(parseInt(cb.value));
+        const isChecked = permissionIds.includes(parseInt(cb.value));
+        cb.checked = isChecked;
+        // Trigger dependency checks for checked permissions
+        if (isChecked) {
+            const permCode = cb.getAttribute('data-code');
+            checkPermissionDependencies(permCode, parseInt(cb.value));
+        }
     });
     
     const modal = new bootstrap.Modal(document.getElementById('roleModal'));

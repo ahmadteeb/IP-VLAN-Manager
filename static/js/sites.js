@@ -20,7 +20,6 @@ function resetSelectById(id) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadTechnologiesForSitesPage();
     loadSites();
     setupEventListeners();
 });
@@ -34,6 +33,7 @@ function setupEventListeners() {
             const modal = new bootstrap.Modal(document.getElementById('addSiteModal'));
             modal.show();
             resetAddSiteForm();
+            loadTechnologiesForSitesPage();
             loadVendorsForSelect();
             loadRoutersForSelect();
         });
@@ -176,23 +176,12 @@ function setupEventListeners() {
         loadSites();
     }, 500));
     
-    document.getElementById('techFilter').addEventListener('change', function() {
-        currentPage = 1;
-        loadSites();
-    });
 }
 
 async function loadTechnologiesForSitesPage() {
     try {
         const data = await apiRequest(window.API_URLS.technologies);
         const techs = data.technologies || [];
-
-        // Filter dropdown
-        const filter = document.getElementById('techFilter');
-        if (filter) {
-            filter.innerHTML = '<option value="">All Technologies</option>' +
-                techs.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-        }
 
         // Multi-select in Add Site
         const multi = document.getElementById('siteTechnologies');
@@ -212,10 +201,8 @@ async function loadSites() {
     });
     
     const search = document.getElementById('searchInput').value;
-    const tech = document.getElementById('techFilter').value;
     
     if (search) params.append('search', search);
-    if (tech) params.append('technology', tech);
     
     try {
         const data = await apiRequest(`${window.API_URLS.sites}?${params}`);
@@ -230,8 +217,12 @@ async function loadSites() {
 function renderSitesTable(sites) {
     const tbody = document.getElementById('siteTableBody');
     
+    // Check if checkbox column exists
+    const hasCheckbox = document.getElementById('selectAllSites') !== null;
+    const colspan = hasCheckbox ? 12 : 11;
+    
     if (sites.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">No sites found</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No sites found</td></tr>`;
         return;
     }
     
@@ -262,10 +253,12 @@ function renderSitesTable(sites) {
             ? interfaceName.substring(0, 20) + '...' 
             : interfaceName;
         
-        // Always use same format - tooltips will show full text on hover
+        // Checkbox column only if checkbox header exists
+        const checkbox = hasCheckbox ? `<td><input type="checkbox" class="site-checkbox" value="${site.id}" ${isChecked} onchange="toggleSiteSelection(${site.id}, this.checked)"></td>` : '';
+        
         return `
         <tr>
-            <td><input type="checkbox" class="site-checkbox" value="${site.id}" ${isChecked} onchange="toggleSiteSelection(${site.id}, this.checked)"></td>
+            ${checkbox}
             <td><code title="${siteId}">${siteId}</code></td>
             <td><strong title="${siteName}">${siteName}</strong></td>
             <td title="${techs.join(', ')}">${techBadges || 'N/A'}</td>
@@ -540,7 +533,7 @@ async function addSite() {
             requestBody.interface_id = parseInt(interfaceId);
         }
         
-        const data = await apiRequest(window.API_URLS.createSite, {
+        const data = await apiRequest(window.API_URLS.addSite, {
             method: 'POST',
             body: JSON.stringify(requestBody)
         });

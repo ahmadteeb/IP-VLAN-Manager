@@ -262,7 +262,7 @@ async function addRouter() {
     }
     
     try {
-        await apiRequest(window.API_URLS.createRouter, {
+        await apiRequest(window.API_URLS.addRouter, {
             method: 'POST',
             body: JSON.stringify({
                 name: name,

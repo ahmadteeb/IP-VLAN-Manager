@@ -22,15 +22,6 @@ function setupEventListeners() {
         document.getElementById('confirmAddVendor').addEventListener('click', addVendor);
     }
     
-    if (document.getElementById('confirmEditVendor')) {
-        document.getElementById('confirmEditVendor').addEventListener('click', updateVendor);
-    }
-    
-    // Edit selected button
-    const editBtn = document.getElementById('editVendorsBtn');
-    if (editBtn) {
-        editBtn.addEventListener('click', editSelectedVendor);
-    }
     
     // Delete selected button
     const deleteBtn = document.getElementById('deleteVendorsBtn');
@@ -81,8 +72,11 @@ async function loadVendors() {
 function renderVendorsTable(vendors) {
     const tbody = document.getElementById('vendorTableBody');
     
-    const isAdmin = document.getElementById('addVendorBtn') !== null;
-    const colspan = isAdmin ? 4 : 3;
+    // Check if user has delete or export permission (not add permission)
+    const hasDeleteOrExport = document.getElementById('deleteVendorsBtn') !== null || document.getElementById('exportVendorsBtn') !== null;
+    const hasCheckbox = document.getElementById('selectAllVendors') !== null;
+    const colspan = hasCheckbox ? 4 : 3;
+    
     if (vendors.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No vendors found</td></tr>`;
         return;
@@ -90,7 +84,7 @@ function renderVendorsTable(vendors) {
     
     tbody.innerHTML = vendors.map(vendor => {
         const isChecked = selectedVendorIds.has(vendor.id) ? 'checked' : '';
-        const checkbox = isAdmin ? `<td><input type="checkbox" class="vendor-checkbox" value="${vendor.id}" ${isChecked} onchange="toggleVendorSelection(${vendor.id}, this.checked)"></td>` : '';
+        const checkbox = hasCheckbox ? `<td><input type="checkbox" class="vendor-checkbox" value="${vendor.id}" ${isChecked} onchange="toggleVendorSelection(${vendor.id}, this.checked)"></td>` : '';
         return `
         <tr>
             ${checkbox}
@@ -136,13 +130,9 @@ function toggleVendorSelection(vendorId, isChecked) {
 }
 
 function updateActionButtons() {
-    const editBtn = document.getElementById('editVendorsBtn');
     const deleteBtn = document.getElementById('deleteVendorsBtn');
     const hasSelection = selectedVendorIds.size > 0;
     
-    if (editBtn) {
-        editBtn.style.display = hasSelection && selectedVendorIds.size === 1 ? 'inline-block' : 'none';
-    }
     if (deleteBtn) {
         deleteBtn.style.display = hasSelection ? 'inline-block' : 'none';
     }
@@ -155,21 +145,6 @@ function updateSelectAllCheckbox() {
         const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
         selectAll.checked = allChecked;
     }
-}
-
-function editSelectedVendor() {
-    const selectedIds = Array.from(selectedVendorIds);
-    if (selectedIds.length !== 1) {
-        showToast('Error', 'Please select exactly one vendor to edit', 'error');
-        return;
-    }
-    
-    // Get vendor info from table
-    const checkbox = document.querySelector(`.vendor-checkbox[value="${selectedIds[0]}"]`);
-    const row = checkbox.closest('tr');
-    const vendorName = row.cells[2].textContent.trim();
-    
-    editVendor(selectedIds[0], vendorName);
 }
 
 async function deleteSelectedVendors() {
@@ -262,7 +237,7 @@ async function addVendor() {
     }
     
     try {
-        await apiRequest(window.API_URLS.createVendor, {
+        await apiRequest(window.API_URLS.addVendor, {
             method: 'POST',
             body: JSON.stringify({
                 name: name
@@ -277,39 +252,7 @@ async function addVendor() {
     }
 }
 
-function editVendor(vendorId, vendorName) {
-    document.getElementById('editVendorId').value = vendorId;
-    document.getElementById('editVendorName').value = vendorName;
-    const modal = new bootstrap.Modal(document.getElementById('editVendorModal'));
-    modal.show();
-}
-
 // Individual delete function removed - use bulk delete instead
-
-async function updateVendor() {
-    const vendorId = document.getElementById('editVendorId').value;
-    const name = document.getElementById('editVendorName').value;
-    
-    if (!name) {
-        showToast('Error', 'Vendor name is required', 'error');
-        return;
-    }
-    
-    try {
-        await apiRequest(window.API_URLS.updateVendor(vendorId), {
-            method: 'PUT',
-            body: JSON.stringify({
-                name: name
-            })
-        });
-        
-        showToast('Success', 'Vendor updated successfully', 'success');
-        bootstrap.Modal.getInstance(document.getElementById('editVendorModal')).hide();
-        loadVendors();
-    } catch (error) {
-        showToast('Error', error.message, 'error');
-    }
-}
 
 // Individual delete function removed - use bulk delete instead
 

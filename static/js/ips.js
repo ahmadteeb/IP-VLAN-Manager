@@ -20,7 +20,6 @@ function resetSelectById(id) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadTechnologiesForIpsPage();
     loadIPs();
     setupEventListeners();
 });
@@ -39,14 +38,6 @@ async function loadTechnologiesForIpsPage() {
             resetSelectById('ipTechnology');
         }
 
-        const filter = document.getElementById('techFilter');
-        if (filter) {
-            filter.innerHTML = '<option value="">All Technologies</option>' +
-                techs.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-            if (window.initSearchableDropdown) {
-                window.initSearchableDropdown(filter);
-            }
-        }
     } catch (error) {
         console.error('Error loading technologies:', error);
     }
@@ -59,6 +50,7 @@ function setupEventListeners() {
             const modal = new bootstrap.Modal(document.getElementById('addIpModal'));
             modal.show();
             resetAddIpForm();
+            loadTechnologiesForIpsPage();
             loadVendorsForSelect();
         });
     }
@@ -154,10 +146,6 @@ function setupEventListeners() {
         loadIPs();
     }, 500));
     
-    document.getElementById('techFilter').addEventListener('change', function() {
-        currentPage = 1;
-        loadIPs();
-    });
     document.getElementById('vendorFilter').addEventListener('input', debounce(function() {
         currentPage = 1;
         loadIPs();
@@ -170,7 +158,6 @@ function setupEventListeners() {
     
     document.getElementById('clearFilters').addEventListener('click', function() {
         document.getElementById('searchInput').value = '';
-        document.getElementById('techFilter').value = '';
         document.getElementById('vendorFilter').value = '';
         document.getElementById('statusFilter').value = '';
         currentPage = 1;
@@ -240,12 +227,10 @@ async function loadIPs() {
     });
     
     const search = document.getElementById('searchInput').value;
-    const tech = document.getElementById('techFilter').value;
     const vendor = document.getElementById('vendorFilter').value;
     const status = document.getElementById('statusFilter').value;
     
     if (search) params.append('search', search);
-    if (tech) params.append('technology', tech);
     if (vendor) params.append('vendor', vendor);
     if (status) params.append('status', status);
     
@@ -571,7 +556,7 @@ async function addIP() {
     }
     
     try {
-        const response = await apiRequest(window.API_URLS.createIp, {
+        const response = await apiRequest(window.API_URLS.addIp, {
             method: 'POST',
             body: JSON.stringify(requestData)
         });

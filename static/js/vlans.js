@@ -21,7 +21,6 @@ function resetSelectById(id) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadTechnologiesForVlansPage();
     loadVLANs();
     setupEventListeners();
 });
@@ -33,6 +32,7 @@ function setupEventListeners() {
             const modal = new bootstrap.Modal(document.getElementById('addVlanModal'));
             modal.show();
             resetAddVlanForm();
+            loadTechnologiesForVlansPage();
             loadVendorsForSelect();
         });
     }
@@ -53,10 +53,6 @@ function setupEventListeners() {
     }
     
     document.getElementById('confirmAddVlan').addEventListener('click', addVLAN);
-    document.getElementById('techFilter').addEventListener('change', function() {
-        currentPage = 1;
-        loadVLANs();
-    });
     document.getElementById('statusFilter').addEventListener('change', function() {
         currentPage = 1;
         loadVLANs();
@@ -96,11 +92,6 @@ async function loadTechnologiesForVlansPage() {
     try {
         const data = await apiRequest(window.API_URLS.technologies);
         const techs = data.technologies || [];
-        const filter = document.getElementById('techFilter');
-        if (filter) {
-            filter.innerHTML = '<option value="">All Technologies</option>' +
-                techs.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-        }
         const select = document.getElementById('vlanTechnology');
         if (select) {
             select.innerHTML = '<option value="">Select Technology</option>' +
@@ -116,14 +107,12 @@ async function loadTechnologiesForVlansPage() {
 }
 
 async function loadVLANs() {
-    const tech = document.getElementById('techFilter').value;
     const status = document.getElementById('statusFilter').value;
     
     const params = new URLSearchParams({
         page: currentPage,
         per_page: perPage
     });
-    if (tech) params.append('technology', tech);
     if (status) params.append('status', status);
     
     try {
@@ -459,7 +448,7 @@ async function addVLAN() {
             requestData.om_vlan_id = omVlanIdInput.includes('-') ? omVlanIdInput : parseInt(omVlanIdInput, 10);
         }
         
-        await apiRequest(window.API_URLS.createVlan, {
+        await apiRequest(window.API_URLS.addVlan, {
             method: 'POST',
             body: JSON.stringify(requestData)
         });

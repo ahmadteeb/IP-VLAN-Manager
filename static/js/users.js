@@ -126,13 +126,12 @@ async function addUser() {
     }
     
     try {
-        await apiRequest(window.API_URLS.createUser, {
+        await apiRequest(window.API_URLS.addUser, {
             method: 'POST',
             body: JSON.stringify({
                 username: username,
                 password: password,
-                role_id: parseRoleValue(roleValue),
-                role: roleValue // fallback for enum roles
+                role_id: parseRoleValue(roleValue)
             })
         });
         
@@ -155,8 +154,7 @@ async function updateUserRole(userId) {
         await apiRequest(window.API_URLS.updateUser(userId), {
             method: 'PUT',
             body: JSON.stringify({
-                role_id: parseRoleValue(newRole),
-                role: newRole // fallback for enum roles
+                role_id: parseRoleValue(newRole)
             })
         });
         showToast('Success', 'User role updated', 'success');
@@ -300,12 +298,8 @@ function renderRoleOptions(user) {
             <option value="${r.id}" ${selectedId === r.id ? 'selected' : ''}>${escapeHtml(r.name)}</option>
         `).join('');
     }
-    // Fallback to enum roles
-    return `
-        <option value="engineer" ${user.role === 'engineer' ? 'selected' : ''}>Engineer</option>
-        <option value="read_only" ${user.role === 'read_only' ? 'selected' : ''}>Read only</option>
-        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
-    `;
+    // Fallback: no roles loaded yet
+    return '<option value="">Loading roles...</option>';
 }
 
 function parseRoleValue(val) {

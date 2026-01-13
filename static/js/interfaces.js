@@ -281,7 +281,7 @@ async function addInterface() {
     }
     
     try {
-        await apiRequest(window.API_URLS.createInterface, {
+        await apiRequest(window.API_URLS.addInterface, {
             method: 'POST',
             body: JSON.stringify({
                 router_id: parseInt(routerId),
