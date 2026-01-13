@@ -139,8 +139,9 @@ async function loadVLANs() {
 function renderVLANsTable(vlans) {
     const tbody = document.getElementById('vlanTableBody');
     
-    const isAdmin = document.getElementById('addVlanBtn') !== null;
-    const colspan = isAdmin ? 5 : 4;
+    // Can show selection checkboxes if bulk delete is available (header checkbox present)
+    const canBulkDelete = document.getElementById('selectAllVlans') !== null;
+    const colspan = canBulkDelete ? 5 : 4;
     if (vlans.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No VLANs found</td></tr>`;
         return;
@@ -158,7 +159,7 @@ function renderVLANsTable(vlans) {
     
     tbody.innerHTML = serviceVlans.map(vlan => {
         const isChecked = selectedVlanIds.has(vlan.id) ? 'checked' : '';
-        const checkbox = isAdmin ? `<td><input type="checkbox" class="vlan-checkbox" value="${vlan.id}" ${isChecked} onchange="toggleVlanSelection(${vlan.id}, this.checked)"></td>` : '';
+        const checkbox = canBulkDelete ? `<td><input type="checkbox" class="vlan-checkbox" value="${vlan.id}" ${isChecked} onchange="toggleVlanSelection(${vlan.id}, this.checked)"></td>` : '';
         
         // Use pair_vlan_number from API response (more reliable across pagination)
         // Fallback to matching by pair_id in current page if pair_vlan_number is not available

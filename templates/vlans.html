@@ -18,16 +18,20 @@
                 <option value="FREE">Free</option>
                 <option value="ASSIGNED">Assigned</option>
             </select>
-            {% if current_user.is_admin() %}
+            {% if current_user.is_authenticated and (current_user.has_permission('vlans.create') or current_user.has_permission('vlans.delete')) %}
+            {% if current_user.has_permission('vlans.delete') %}
             <button class="btn btn-sm btn-outline-success" id="exportVlansBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
             <button class="btn btn-sm btn-danger" id="deleteVlansBtn" style="display: none;">
                 <i class="fas fa-trash"></i> Delete Selected
             </button>
+            {% endif %}
+            {% if current_user.has_permission('vlans.create') %}
             <button class="btn btn-sm btn-primary" id="addVlanBtn">
                 <i class="fas fa-plus"></i> Add VLAN
             </button>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -42,7 +46,7 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        {% if current_user.is_admin() %}
+                        {% if current_user.is_authenticated and current_user.has_permission('vlans.delete') %}
                         <th><input type="checkbox" id="selectAllVlans" title="Select All"></th>
                         {% endif %}
                         <th>Service VLAN</th>

@@ -120,15 +120,16 @@ async function loadInterfaces() {
 function renderInterfacesTable(interfaces) {
     const tbody = document.getElementById('interfaceTableBody');
     
-    const isAdmin = document.getElementById('addInterfaceBtn') !== null;
-    const colspan = isAdmin ? 3 : 2;
+    // Can show selection checkboxes if bulk delete is available (header checkbox present)
+    const canBulkDelete = document.getElementById('selectAllInterfaces') !== null;
+    const colspan = canBulkDelete ? 3 : 2;
     if (interfaces.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No interfaces found</td></tr>`;
         return;
     }
     tbody.innerHTML = interfaces.map(iface => {
         const isChecked = selectedInterfaceIds.has(iface.id) ? 'checked' : '';
-        const checkbox = isAdmin ? `<td><input type="checkbox" class="interface-checkbox" value="${iface.id}" ${isChecked} onchange="toggleInterfaceSelection(${iface.id}, this.checked)"></td>` : '';
+        const checkbox = canBulkDelete ? `<td><input type="checkbox" class="interface-checkbox" value="${iface.id}" ${isChecked} onchange="toggleInterfaceSelection(${iface.id}, this.checked)"></td>` : '';
         return `
         <tr>
             ${checkbox}

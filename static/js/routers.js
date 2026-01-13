@@ -95,15 +95,16 @@ async function loadRouters() {
 function renderRoutersTable(routers) {
     const tbody = document.getElementById('routerTableBody');
     
-    const isAdmin = document.getElementById('addRouterBtn') !== null;
-    const colspan = isAdmin ? 5 : 4;
+    // Can show selection checkboxes if bulk delete is available (header checkbox present)
+    const canBulkDelete = document.getElementById('selectAllRouters') !== null;
+    const colspan = canBulkDelete ? 5 : 4;
     if (routers.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No routers found</td></tr>`;
         return;
     }
     tbody.innerHTML = routers.map(router => {
         const isChecked = selectedRouterIds.has(router.id) ? 'checked' : '';
-        const checkbox = isAdmin ? `<td><input type="checkbox" class="router-checkbox" value="${router.id}" ${isChecked} onchange="toggleRouterSelection(${router.id}, this.checked)"></td>` : '';
+        const checkbox = canBulkDelete ? `<td><input type="checkbox" class="router-checkbox" value="${router.id}" ${isChecked} onchange="toggleRouterSelection(${router.id}, this.checked)"></td>` : '';
         return `
         <tr>
             ${checkbox}

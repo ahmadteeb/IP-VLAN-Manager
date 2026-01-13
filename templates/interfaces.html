@@ -13,16 +13,20 @@
             <select class="form-select form-select-sm d-inline-block" id="routerFilter" style="width: auto;">
                 <option value="">All Routers</option>
             </select>
-            {% if current_user.is_admin() %}
+            {% if current_user.is_authenticated and (current_user.has_permission('interfaces.create') or current_user.has_permission('interfaces.delete')) %}
+            {% if current_user.has_permission('interfaces.delete') %}
             <button class="btn btn-sm btn-outline-success" id="exportInterfacesBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
             <button class="btn btn-sm btn-danger" id="deleteInterfacesBtn" style="display: none;">
                 <i class="fas fa-trash"></i> Delete Selected
             </button>
+            {% endif %}
+            {% if current_user.has_permission('interfaces.create') %}
             <button class="btn btn-sm btn-primary" id="addInterfaceBtn">
                 <i class="fas fa-plus"></i> Add Interface
             </button>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -31,7 +35,7 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        {% if current_user.is_admin() %}
+                        {% if current_user.is_authenticated and current_user.has_permission('interfaces.delete') %}
                         <th><input type="checkbox" id="selectAllInterfaces" title="Select All"></th>
                         {% endif %}
                         <th>Router</th>

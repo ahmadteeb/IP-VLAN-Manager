@@ -44,39 +44,65 @@
             </button>
         </div>
         <ul class="sidebar-menu">
+            {% if current_user.is_authenticated and current_user.has_permission('dashboard.view') %}
             <li><a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}" title="Dashboard">
                 <i class="fas fa-home"></i> <span>Dashboard</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('sites.view') %}
             <li><a href="{{ url_for('sites') }}" class="{% if request.endpoint == 'sites' %}active{% endif %}" title="Sites">
                 <i class="fas fa-building"></i> <span>Sites</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('routers.view') %}
             <li><a href="{{ url_for('routers') }}" class="{% if request.endpoint == 'routers' %}active{% endif %}" title="Routers">
                 <i class="fas fa-network-wired"></i> <span>Routers</span>
             </a></li>
-            {% if current_user.is_authenticated and not current_user.is_read_only() %}
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('interfaces.view') %}
             <li><a href="{{ url_for('interfaces') }}" class="{% if request.endpoint == 'interfaces' %}active{% endif %}" title="Interfaces">
                 <i class="fas fa-plug"></i> <span>Interfaces</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('vlans.view') %}
             <li><a href="{{ url_for('vlans') }}" class="{% if request.endpoint == 'vlans' %}active{% endif %}" title="VLANs">
                 <i class="fas fa-network-wired"></i> <span>VLANs</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('ips.view') %}
             <li><a href="{{ url_for('ips') }}" class="{% if request.endpoint == 'ips' %}active{% endif %}" title="IPs">
                 <i class="fas fa-server"></i> <span>IPs</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('technologies.view') %}
             <li><a href="{{ url_for('technologies') }}" class="{% if request.endpoint == 'technologies' %}active{% endif %}" title="Technologies">
                 <i class="fas fa-microchip"></i> <span>Technologies</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('vendors.view') %}
             <li><a href="{{ url_for('vendors') }}" class="{% if request.endpoint == 'vendors' %}active{% endif %}" title="Vendors">
                 <i class="fas fa-building"></i> <span>Vendors</span>
             </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('utils.subnet_calculator') %}
             <li><a href="{{ url_for('subnet_calculator') }}" class="{% if request.endpoint == 'subnet_calculator' %}active{% endif %}" title="Subnet Calculator">
                 <i class="fas fa-calculator"></i> <span>Subnet Calculator</span>
             </a></li>
-            {% if current_user.is_admin() %}
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('logs.view') %}
+            <li><a href="{{ url_for('activity_logs') }}" class="{% if request.endpoint == 'activity_logs' %}active{% endif %}" title="Activity Logs">
+                <i class="fas fa-history"></i> <span>Activity Logs</span>
+            </a></li>
+            {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('users.manage') %}
             <li><a href="{{ url_for('users') }}" class="{% if request.endpoint == 'users' %}active{% endif %}" title="Users">
                 <i class="fas fa-users"></i> <span>Users</span>
             </a></li>
             {% endif %}
+            {% if current_user.is_authenticated and current_user.has_permission('roles.manage') %}
+            <li><a href="{{ url_for('roles') }}" class="{% if request.endpoint == 'roles' %}active{% endif %}" title="Roles">
+                <i class="fas fa-user-shield"></i> <span>Roles</span>
+            </a></li>
             {% endif %}
         </ul>
         <div class="sidebar-footer">
@@ -106,7 +132,7 @@
                         <div class="user-avatar">{{ user_initial }}</div>
                         <div class="d-flex flex-column">
                             <span class="fw-semibold text-truncate">{{ current_user.username }}</span>
-                            <small class="text-muted text-uppercase">{{ current_user.role.value }}</small>
+                            <small class="text-muted text-uppercase">{{ current_user.get_role_name() }}</small>
                         </div>
                     </div>
                     <button class="btn btn-icon" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">
@@ -221,6 +247,13 @@
             updateUser: function(id) { return '{{ url_for("api_update_user", user_id=0) }}'.replace('0', id); },
             deleteUser: function(id) { return '{{ url_for("api_delete_user", user_id=0) }}'.replace('0', id); },
             resetPassword: function(id) { return '{{ url_for("api_admin_reset_password", user_id=0) }}'.replace('0', id); },
+            
+            // Roles
+            roles: '{{ url_for("api_get_roles") }}',
+            permissions: '{{ url_for("api_get_permissions") }}',
+            createRole: '{{ url_for("api_create_role") }}',
+            updateRole: function(id) { return '{{ url_for("api_update_role", role_id=0) }}'.replace('0', id); },
+            deleteRole: function(id) { return '{{ url_for("api_delete_role", role_id=0) }}'.replace('0', id); },
             
             // Utilities
             subnetCalculator: '{{ url_for("api_calculate_subnets") }}',

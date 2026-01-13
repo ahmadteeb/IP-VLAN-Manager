@@ -93,60 +93,6 @@
 
 </div>
 
-<!-- Recent Activities -->
-<div class="row g-4 mt-1">
-    <div class="col-12">
-        <div class="card glass-card">
-            <div class="card-header">
-                <h5 class="card-title mb-0 d-flex align-items-center gap-2">
-                    <i class="fas fa-history text-warning"></i>
-                    Recent Activities
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>User</th>
-                                <th>Action</th>
-                                <th>Resource</th>
-                                <th>Site</th>
-                                <th>Router</th>
-                                <th>Interface</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for activity in recent_activities %}
-                            <tr>
-                                <td>{{ activity.timestamp.strftime('%Y-%m-%d %H:%M:%S') if activity.timestamp else 'N/A' }}</td>
-                                <td>{{ activity.user_username }}</td>
-                                <td>
-                                    <span class="badge bg-{{ 'success' if 'assign' in activity.action or 'create' in activity.action else 'warning' }}">
-                                        {{ activity.action.replace('_', ' ').title() }}
-                                    </span>
-                                </td>
-                                <td>
-                                    <span class="badge bg-info text-dark">{{ activity.resource_type.upper() }}</span>
-                                    {{ activity.resource_value }}
-                                </td>
-                                <td>{{ activity.site_name or 'N/A' }}</td>
-                                <td>{{ activity.router or 'N/A' }}</td>
-                                <td>{{ activity.interface or 'N/A' }}</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="7" class="text-center text-muted py-4">No activities found</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}

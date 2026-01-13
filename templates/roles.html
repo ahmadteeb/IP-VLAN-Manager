@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Role Management - IP/VLAN Manager{% endblock %}
+{% block page_title %}Role Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-user-shield"></i> Roles & Permissions
+        </h5>
+        <button class="btn btn-sm btn-primary" id="addRoleBtn">
+            <i class="fas fa-plus"></i> Add Role
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Role Name</th>
+                        <th>Description</th>
+                        <th>Permissions</th>
+                        <th>Users</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rolesTableBody">
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">
+                            <i class="fas fa-spinner fa-spin"></i> Loading roles...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Role Modal -->
+<div class="modal fade" id="roleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="roleModalTitle">Add Role</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="roleForm">
+                    <input type="hidden" id="roleId">
+                    <div class="mb-3">
+                        <label class="form-label">Role Name *</label>
+                        <input type="text" class="form-control" id="roleName" required>
+                        <small class="text-muted">A unique name for this role</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="roleDescription" rows="2"></textarea>
+                        <small class="text-muted">Describe what this role can do</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Permissions *</label>
+                        <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                            <div id="permissionsContainer">
+                                <div class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading permissions...
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted">Select the permissions this role should have</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveRoleBtn">
+                    <i class="fas fa-save"></i> Save Role
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/roles.js') }}"></script>
+{% endblock %}
+

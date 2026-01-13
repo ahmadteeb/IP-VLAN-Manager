@@ -1,5 +1,6 @@
 let currentPage = 1;
 const perPage = 50;
+let roles = [];
 
 function resetSelectById(id) {
     const select = document.getElementById(id);
@@ -19,9 +20,10 @@ function resetSelectById(id) {
 }
 
 // Initialize
-document.addEventListener('DOMContentLoaded', function() {
-    loadUsers();
+document.addEventListener('DOMContentLoaded', async function() {
     setupEventListeners();
+    await loadRoles();
+    await loadUsers();
 });
 
 function setupEventListeners() {
@@ -51,6 +53,24 @@ async function loadUsers() {
     }
 }
 
+async function loadRoles() {
+    try {
+        const data = await apiRequest(window.API_URLS.roles);
+        roles = data.roles || [];
+        // Populate the Add User modal role select
+        const roleSelect = document.getElementById('role');
+        if (roleSelect && roles.length > 0) {
+            roleSelect.innerHTML = roles.map(r => `
+                <option value="${r.id}">${escapeHtml(r.name)}</option>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Error loading roles:', error);
+        showToast('Error', 'Failed to load roles list', 'error');
+        roles = [];
+    }
+}
+
 function renderUsersTable(users) {
     const tbody = document.getElementById('userTableBody');
     
@@ -65,9 +85,7 @@ function renderUsersTable(users) {
             <td>
                 <div class="d-flex align-items-center gap-2">
                     <select class="form-select form-select-sm" style="width:auto" id="roleSelect-${user.id}">
-                        <option value="engineer" ${user.role === 'engineer' ? 'selected' : ''}>Engineer</option>
-                        <option value="read_only" ${user.role === 'read_only' ? 'selected' : ''}>Read only</option>
-                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+                        ${renderRoleOptions(user)}
                     </select>
                     <button class="btn btn-sm btn-outline-primary" onclick="updateUserRole(${user.id})">
                         <i class="fas fa-save"></i>
@@ -94,7 +112,7 @@ function resetAddUserForm() {
 async function addUser() {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    const role = document.getElementById('role').value;
+    const roleValue = document.getElementById('role').value;
     
     if (!username || !password) {
         showToast('Error', 'Please fill all required fields', 'error');
@@ -113,7 +131,8 @@ async function addUser() {
             body: JSON.stringify({
                 username: username,
                 password: password,
-                role: role
+                role_id: parseRoleValue(roleValue),
+                role: roleValue // fallback for enum roles
             })
         });
         
@@ -135,7 +154,10 @@ async function updateUserRole(userId) {
     try {
         await apiRequest(window.API_URLS.updateUser(userId), {
             method: 'PUT',
-            body: JSON.stringify({ role: newRole })
+            body: JSON.stringify({
+                role_id: parseRoleValue(newRole),
+                role: newRole // fallback for enum roles
+            })
         });
         showToast('Success', 'User role updated', 'success');
         loadUsers();
@@ -213,15 +235,23 @@ function openResetPasswordModal(userId, username) {
 }
 
 async function deleteUser(userId) {
-    if (!confirm('Are you sure you want to delete this user?')) {
+    const confirmed = await showConfirm({
+        title: 'Delete User',
+        message: 'Are you sure you want to delete this user?',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        confirmBtnClass: 'btn-danger'
+    });
+
+    if (!confirmed) {
         return;
     }
-    
+
     try {
         await apiRequest(window.API_URLS.deleteUser(userId), {
             method: 'DELETE'
         });
-        
+
         showToast('Success', 'User deleted successfully', 'success');
         currentPage = 1;
         loadUsers();
@@ -260,6 +290,34 @@ function renderPagination(total, pages, current) {
     </li>`;
     
     pagination.innerHTML = html;
+}
+
+function renderRoleOptions(user) {
+    // If we have dynamic roles, render them
+    if (roles && roles.length > 0) {
+        const selectedId = user.role_id || null;
+        return roles.map(r => `
+            <option value="${r.id}" ${selectedId === r.id ? 'selected' : ''}>${escapeHtml(r.name)}</option>
+        `).join('');
+    }
+    // Fallback to enum roles
+    return `
+        <option value="engineer" ${user.role === 'engineer' ? 'selected' : ''}>Engineer</option>
+        <option value="read_only" ${user.role === 'read_only' ? 'selected' : ''}>Read only</option>
+        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+    `;
+}
+
+function parseRoleValue(val) {
+    if (!val) return null;
+    const num = Number(val);
+    return Number.isFinite(num) ? num : null;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
 }
 
 function changePage(page) {

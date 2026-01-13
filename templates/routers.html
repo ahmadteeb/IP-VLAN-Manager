@@ -13,16 +13,20 @@
         <div class="d-flex align-items-center gap-2">
             <input type="text" class="form-control form-control-sm d-inline-block me-2" id="searchInput" placeholder="Search..." style="width: 200px;">
             
-            {% if current_user.is_admin() %}
+            {% if current_user.is_authenticated and (current_user.has_permission('routers.create') or current_user.has_permission('routers.delete')) %}
+            {% if current_user.has_permission('routers.delete') %}
             <button class="btn btn-sm btn-outline-success" id="exportRoutersBtn">
                 <i class="fas fa-file-excel"></i> Export Selected
             </button>
             <button class="btn btn-sm btn-danger" id="deleteRoutersBtn" style="display: none;">
                 <i class="fas fa-trash"></i> Delete Selected
             </button>
+            {% endif %}
+            {% if current_user.has_permission('routers.create') %}
             <button class="btn btn-sm btn-primary" id="addRouterBtn">
                 <i class="fas fa-plus"></i> Add Router
             </button>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -31,7 +35,7 @@
             <table class="table table-hover">
                 <thead>
                     <tr>
-                        {% if current_user.is_admin() %}
+                        {% if current_user.is_authenticated and current_user.has_permission('routers.delete') %}
                         <th><input type="checkbox" id="selectAllRouters" title="Select All"></th>
                         {% endif %}
                         <th>Name</th>

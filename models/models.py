@@ -2,10 +2,18 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-from sqlalchemy import UniqueConstraint, Enum, Boolean
+from sqlalchemy import UniqueConstraint, Enum, Boolean, Table, Column, Integer, ForeignKey, String
 import enum
 
 db = SQLAlchemy()
+
+# Association table for Role-Permission many-to-many relationship
+role_permissions = Table(
+    'role_permissions',
+    db.Model.metadata,
+    Column('role_id', Integer, ForeignKey('roles.id'), primary_key=True),
+    Column('permission_id', Integer, ForeignKey('permissions.id'), primary_key=True)
+)
 
 
 
@@ -28,9 +36,73 @@ class StatusType(enum.Enum):
     ASSIGNED = "assigned"
 
 class UserRole(enum.Enum):
+    """Legacy enum - only ADMIN is used for backward compatibility.
+    Non-admin permissions are handled via the Role model."""
     ADMIN = "admin"
-    ENGINEER = "engineer"
-    READ_ONLY = "read_only"
+
+class Permission(db.Model):
+    """Permission model for fine-grained access control"""
+    __tablename__ = 'permissions'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    code = db.Column(db.String(100), unique=True, nullable=False, index=True)  # e.g., 'users.manage', 'routers.create'
+    description = db.Column(db.String(500))
+    category = db.Column(db.String(50), nullable=False, index=True)  # e.g., 'users', 'routers', 'sites'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Many-to-many relationship with Role
+    roles = db.relationship('Role', secondary=role_permissions, back_populates='permissions', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'description': self.description,
+            'category': self.category,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
+    def __repr__(self):
+        return f'<Permission {self.code}>'
+
+class Role(db.Model):
+    """Role model for managing user roles with permissions"""
+    __tablename__ = 'roles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(500))
+    is_system = db.Column(Boolean, default=False, nullable=False)  # System roles cannot be deleted
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Many-to-many relationship with Permission
+    permissions = db.relationship('Permission', secondary=role_permissions, back_populates='roles', lazy=True)
+    
+    # One-to-many relationship with User
+    users = db.relationship('User', backref='role_obj', lazy=True, foreign_keys='User.role_id')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'is_system': self.is_system,
+            'permissions': [p.to_dict() for p in self.permissions],
+            'permission_ids': [p.id for p in self.permissions],
+            'user_count': len(self.users) if self.users else 0,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+    
+    def has_permission(self, permission_code):
+        """Check if role has a specific permission"""
+        return any(p.code == permission_code for p in self.permissions)
+    
+    def __repr__(self):
+        return f'<Role {self.name}>'
 
 class Vendor(db.Model):
     __tablename__ = 'vendors'
@@ -61,7 +133,10 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.ENGINEER)
+    # Legacy role string column kept for backward compatibility with existing data.
+    # New permissions come from Role / role_id.
+    role = db.Column(db.String(50), nullable=True)
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=True, index=True)  # New role reference
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def set_password(self, password):
@@ -73,12 +148,45 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
     
     def is_admin(self):
-        """Check if user is admin"""
-        return self.role == UserRole.ADMIN
+        """Check if user is admin - supports both enum and role model"""
+        if self.role_id and self.role_obj:
+            return self.role_obj.has_permission('admin.full_access') or self.role_obj.name.lower() == 'admin'
+        # Fallback: legacy string-based role
+        return (self.role or "").lower() == UserRole.ADMIN.value
     
     def is_read_only(self):
-        """Check if user is read-only"""
-        return self.role == UserRole.READ_ONLY
+        """Check if user is read-only - supports both enum and role model"""
+        if self.role_id and self.role_obj:
+            # Read-only users should only have view permissions
+            write_permissions = ['routers.create', 'routers.update', 'routers.delete',
+                                'interfaces.create', 'interfaces.delete',
+                                'vlans.create', 'vlans.delete',
+                                'ips.create', 'ips.delete',
+                                'sites.create', 'sites.update', 'sites.delete',
+                                'vendors.create', 'vendors.update', 'vendors.delete',
+                                'technologies.create', 'technologies.update', 'technologies.delete']
+            has_write = any(self.role_obj.has_permission(p) for p in write_permissions)
+            return not has_write and self.role_obj.name.lower() != 'admin'
+        # Fallback: treat legacy 'read_only' value as read-only
+        return (self.role or "").lower() == "read_only"
+    
+    def has_permission(self, permission_code):
+        """Check if user has a specific permission"""
+        if self.role_id and self.role_obj:
+            return self.role_obj.has_permission(permission_code)
+        # Fallback to enum-based checks for backward compatibility
+        if (self.role or "").lower() == UserRole.ADMIN.value:
+            return True
+        if (self.role or "").lower() == "read_only":
+            return permission_code.startswith('view.') or permission_code == 'dashboard.view'
+        # Engineer has most permissions except admin ones
+        return not permission_code.startswith('admin.') and not permission_code.startswith('users.')
+    
+    def get_role_name(self):
+        """Get role name - supports both enum and role model"""
+        if self.role_id and self.role_obj:
+            return self.role_obj.name
+        return self.role if self.role else 'Unknown'
     
     def __repr__(self):
         return f'<User {self.username}>'

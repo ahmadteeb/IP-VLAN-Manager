@@ -20,23 +20,27 @@
             <button class="btn btn-sm btn-outline-primary" id="generateConfigBtn">
                 <i class="fas fa-cog"></i> Generate Config
             </button>
-            {% if not current_user.is_read_only() %}
+            {% if current_user.is_authenticated and (current_user.has_permission('sites.create') or current_user.has_permission('sites.transfer') or current_user.has_permission('sites.release') or current_user.has_permission('sites.import')) %}
+            {% if current_user.has_permission('sites.transfer') %}
             <button class="btn btn-sm btn-warning" id="transferSitesBtn" style="display: none;">
                 <i class="fas fa-exchange-alt"></i> Transfer Selected
             </button>
-            {% if current_user.is_admin() %}
+            {% endif %}
+            {% if current_user.has_permission('sites.release') %}
             <button class="btn btn-sm btn-danger" id="releaseSitesBtn" style="display: none;">
                 <i class="fas fa-unlock"></i> Release Selected
             </button>
             {% endif %}
-            {% if current_user.is_admin() %}
+            {% if current_user.has_permission('sites.import') %}
             <button class="btn btn-sm btn-success" id="bulkAddSitesBtn">
                 <i class="fas fa-file-excel"></i> Bulk Add Sites
             </button>
             {% endif %}
+            {% if current_user.has_permission('sites.create') %}
             <button class="btn btn-sm btn-primary" id="addSiteBtn">
                 <i class="fas fa-plus"></i> Add Site
             </button>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -190,7 +194,7 @@
     </div>
 </div>
 
-{% if current_user.is_admin() %}
+{% if current_user.is_authenticated and current_user.has_permission('sites.import') %}
 <!-- Bulk Add Sites Modal -->
 <div class="modal fade" id="bulkAddSitesModal" tabindex="-1">
     <div class="modal-dialog">

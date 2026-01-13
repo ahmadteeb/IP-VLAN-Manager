@@ -264,8 +264,9 @@ let selectedIpIds = new Set();
 function renderIPsTable(ips) {
     const tbody = document.getElementById('ipTableBody');
     
-    const isAdmin = document.getElementById('addIpBtn') !== null;
-    const colspan = isAdmin ? 9 : 8;
+    // Can show selection checkboxes if bulk delete is available (header checkbox present)
+    const canBulkDelete = document.getElementById('selectAllIps') !== null;
+    const colspan = canBulkDelete ? 9 : 8;
     if (ips.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No IPs found</td></tr>`;
         return;
@@ -275,7 +276,7 @@ function renderIPsTable(ips) {
     // Use pair_gateway from API response (populated by to_dict() method)
     tbody.innerHTML = ips.map(ip => {
         const isChecked = selectedIpIds.has(ip.id) ? 'checked' : '';
-        const checkbox = isAdmin ? `<td><input type="checkbox" class="ip-checkbox" value="${ip.id}" ${isChecked} onchange="toggleIpSelection(${ip.id}, this.checked)"></td>` : '';
+        const checkbox = canBulkDelete ? `<td><input type="checkbox" class="ip-checkbox" value="${ip.id}" ${isChecked} onchange="toggleIpSelection(${ip.id}, this.checked)"></td>` : '';
         
         const omIpDisplay = ip.pair_gateway ? `<code>${ip.pair_gateway}</code>` : '<span class="text-muted">—</span>';
         const serviceMaskDisplay = ip.subnet_mask ? `<code>${ip.subnet_mask}</code>` : '<span class="text-muted">—</span>';

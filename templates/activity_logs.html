@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Logs - IP/VLAN Manager{% endblock %}
+{% block page_title %}Activity Logs{% endblock %}
+{% block page_subtitle %}Detailed audit of recent actions{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-history text-warning"></i> Activity Logs
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Resource</th>
+                        <th>Site</th>
+                        <th>Router</th>
+                        <th>Interface</th>
+                    </tr>
+                </thead>
+                <tbody id="activityLogsBody">
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            <i class="fas fa-spinner fa-spin me-2"></i> Loading activity logs...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-3">
+            <ul class="pagination" id="activityLogsPagination">
+                <!-- Pagination will be inserted here -->
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/activity_logs.js') }}"></script>
+{% endblock %}
+
+

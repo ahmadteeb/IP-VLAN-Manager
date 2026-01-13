@@ -129,6 +129,19 @@ function setupEventListeners() {
     }
     
     // Load interfaces when transfer router is selected
+    const transferRouterSelect = document.getElementById('transferRouter');
+    if (transferRouterSelect) {
+        transferRouterSelect.addEventListener('change', function() {
+            const routerId = this.value;
+            if (routerId) {
+                loadInterfacesForTransferRouter(routerId);
+            } else {
+                document.getElementById('transferInterface').innerHTML = '<option value="">Select Interface</option>';
+            }
+        });
+    }
+    
+    // Load interfaces when transfer router is selected
     const transferRouter = document.getElementById('transferRouter');
     if (transferRouter) {
         transferRouter.addEventListener('change', function() {
@@ -584,8 +597,26 @@ async function openTransferModal(selectedSiteIds) {
         ).join('');
         
         // Load routers and reset interface
-        loadRoutersForTransfer();
+        await loadRoutersForTransfer();
         document.getElementById('transferInterface').innerHTML = '<option value="">Select Interface</option>';
+        
+        // Pre-select the assigned router if all selected sites have the same router
+        if (selectedSites.length > 0) {
+            const routerIds = selectedSites
+                .map(s => s.router_id)
+                .filter(id => id != null && id !== undefined);
+            
+            if (routerIds.length > 0) {
+                // If all sites have the same router, pre-select it
+                const uniqueRouterIds = [...new Set(routerIds)];
+                if (uniqueRouterIds.length === 1) {
+                    const routerSelect = document.getElementById('transferRouter');
+                    routerSelect.value = uniqueRouterIds[0];
+                    // Trigger change to load interfaces for this router
+                    routerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        }
         
         const modal = new bootstrap.Modal(document.getElementById('transferSitesModal'));
         modal.show();
