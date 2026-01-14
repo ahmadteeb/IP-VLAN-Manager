@@ -26,7 +26,7 @@ function setupEventListeners() {
 
 async function loadRoles() {
     try {
-        const data = await apiRequest('/api/roles');
+        const data = await apiRequest(`${window.API_URLS.roles}`);
         roles = data.roles;
         renderRolesTable();
     } catch (error) {
@@ -37,7 +37,7 @@ async function loadRoles() {
 
 async function loadPermissions() {
     try {
-        const data = await apiRequest('/api/permissions');
+        const data = await apiRequest(`${window.API_URLS.permissions}`);
         permissions = data.permissions;
         permissionsByCategory = data.permissions_by_category;
         renderPermissions();
@@ -320,7 +320,7 @@ async function saveRole() {
         return;
     }
     
-    const url = roleId ? `/api/roles/${roleId}` : '/api/roles';
+    const url = roleId ? `${window.API_URLS.updateRole(roleId)}` : `${window.API_URLS.addRole}`;
     const method = roleId ? 'PUT' : 'POST';
     
     try {
@@ -367,7 +367,8 @@ async function deleteRole(roleId) {
     }
 
     try {
-        const data = await apiRequest(`/api/roles/${roleId}`, {
+        const url = `${window.API_URLS.deleteRole(roleId)}`;
+        const data = await apiRequest(url, {
             method: 'DELETE'
         });
         
