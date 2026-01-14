@@ -3189,7 +3189,7 @@ def init_permissions():
         {'name': 'View Sites', 'code': 'sites.view', 'description': 'View site list and details', 'category': 'sites', 'required_permissions': []},
         {'name': 'Add Sites', 'code': 'sites.add', 'description': 'Add new sites', 'category': 'sites', 'required_permissions': ['vendors.view', 'technologies.view', 'routers.view', 'interfaces.view', 'sites.view']},
         {'name': 'Release Sites', 'code': 'sites.release', 'description': 'Release assigned sites', 'category': 'sites', 'required_permissions': ['sites.view']},
-        {'name': 'Transfer Sites', 'code': 'sites.transfer', 'description': 'Transfer sites to other router/interface', 'category': 'sites', 'required_permissions': ['sites.view, routers.view, interfaces.view']},
+        {'name': 'Transfer Sites', 'code': 'sites.transfer', 'description': 'Transfer sites to other router/interface', 'category': 'sites', 'required_permissions': ['sites.view', 'routers.view', 'interfaces.view']},
         {'name': 'Import Sites', 'code': 'sites.import', 'description': 'Import sites from Excel', 'category': 'sites', 'required_permissions': ['sites.view']},
         {'name': 'Export Sites', 'code': 'sites.export', 'description': 'Export sites to Excel', 'category': 'sites', 'required_permissions': ['sites.view']},
         {'name': 'Generate Site Config', 'code': 'sites.generate_config', 'description': 'Generate configuration blocks for sites', 'category': 'sites', 'required_permissions': ['sites.view']},
