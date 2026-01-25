@@ -3,6 +3,7 @@ import os
 from sqlalchemy import create_engine, text
 import json
 from datetime import datetime
+import traceback
 
 try:
 
@@ -53,21 +54,46 @@ try:
         routers = routers = [dict(row._mapping) for row in conn.execute(query)]
 
         for router in routers:
-            ne_id = network_element_data[network_element_data['ip-address'] == router['router_ip']]['res-id'].values[0]
-            filtered_interfaces = interfaces[interfaces['ne-id'] == ne_id].to_dict(orient='records')
-            for interface in filtered_interfaces:
-                query = text("""
-                    INSERT INTO interfaces (router_id, name)
-                    VALUES (:router_id, :name)
-                    ON DUPLICATE KEY UPDATE router_id = router_id
-                """)
-                
-                conn.execute(query, {
-                    "router_id": router['id'],
-                    "name": interface['name'],
-                });
+            print(f"Inserting Interfaces for router: {router['name']}")
+            try:
+                ne_id = network_element_data.loc[
+                    network_element_data['ip-address'] == router['router_ip'],
+                    'res-id'
+                    ].iloc[0]
+                filtered_interfaces = interfaces[interfaces['ne-id'] == ne_id].to_dict(orient='records')
+                for interface in filtered_interfaces:
+                    query = text("""
+                        INSERT INTO interfaces (router_id, name)
+                        VALUES (:router_id, :name)
+                        ON DUPLICATE KEY UPDATE router_id = router_id
+                    """)
+                    
+                    conn.execute(query, {
+                        "router_id": router['id'],
+                        "name": interface['name'],
+                    });
             
-            print(f"Inserted interfaces for router: {router['name']}")
+                print(f"Inserted interfaces for router: {router['name']}")
+            except IndexError:
+                try:
+                    query = text("""
+                        DELETE FROM interfaces WHERE router_id = :router_id
+                    """)
+                    conn.execute(query, {
+                        "router_id": router['id'],
+                    });
+                    print(f"Deleted interfaces for router: {router['name']}")
+                    query = text("""
+                        DELETE FROM routers WHERE id = :router_id
+                    """)
+                    conn.execute(query, {
+                        "router_id": router['id'],
+                    });
+                    print(f"Deleted router: {router['name']}")
+                except Exception as e:
+                    print(f"Error deleting interfaces for router: {router['name']} - {e}")
+                    with open("routers_need_to_be_deleted.log", "a") as f:
+                        f.write(f"{router['name']} - {e}\n")
         conn.commit()
 
     print("Insert complete. Duplicate interfaces skipped.")
@@ -81,4 +107,5 @@ except Exception as e:
     with open("error_update_routers.log", "a") as f:
         f.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Error: {e}\n")
+        f.write(f"Error traceback: {traceback.format_exc()}\n")
         f.write("--------------------------------\n")
