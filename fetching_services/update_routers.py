@@ -63,7 +63,7 @@ try:
                 filtered_interfaces = interfaces[interfaces['ne-id'] == ne_id].to_dict(orient='records')
                 for interface in filtered_interfaces:
                     query = text("""
-                        INSERT INTO interfaces (router_id, name)
+                        INSERT IGNORE INTO interfaces (router_id, name)
                         VALUES (:router_id, :name)
                         ON DUPLICATE KEY UPDATE router_id = router_id
                     """)
