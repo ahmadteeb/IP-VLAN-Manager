@@ -64,8 +64,7 @@ try:
                 for interface in filtered_interfaces:
                     query = text("""
                         INSERT IGNORE INTO interfaces (router_id, name)
-                        VALUES (:router_id, :name)
-                        ON DUPLICATE KEY UPDATE router_id = router_id
+                        VALUES (:router_id, :name);
                     """)
                     
                     conn.execute(query, {
