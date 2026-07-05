@@ -199,8 +199,30 @@ async function loadTechnologiesForSitesPage() {
         // Multi-select in Add Site
         const multi = document.getElementById('siteTechnologies');
         if (multi) {
-            multi.innerHTML = techs.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-            resetSelectById('siteTechnologies');
+            multi.innerHTML = techs.map(t => `
+                <li>
+                    <div class="form-check px-3 py-1 dropdown-item">
+                        <input class="form-check-input tech-checkbox" type="checkbox" value="${t.name}" id="tech_${t.name.replace(/\s+/g, '_')}">
+                        <label class="form-check-label w-100" for="tech_${t.name.replace(/\s+/g, '_')}" style="cursor:pointer">
+                            ${t.name}
+                        </label>
+                    </div>
+                </li>
+            `).join('');
+            
+            const checkboxes = multi.querySelectorAll('.tech-checkbox');
+            const btnText = document.querySelector('#siteTechnologiesDropdown .selected-text');
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const selected = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
+                    if (selected.length === 0) {
+                        btnText.textContent = 'Select Technologies';
+                    } else {
+                        btnText.textContent = selected.join(', ');
+                    }
+                });
+            });
+            resetTechMultiselect();
         }
     } catch (error) {
         console.error('Error loading technologies:', error);
@@ -520,20 +542,29 @@ async function loadInterfacesForRouter(routerId) {
     }
 }
 
+function resetTechMultiselect() {
+    const multi = document.getElementById('siteTechnologies');
+    if (multi) {
+        multi.querySelectorAll('.tech-checkbox').forEach(cb => cb.checked = false);
+        const btnText = document.querySelector('#siteTechnologiesDropdown .selected-text');
+        if (btnText) btnText.textContent = 'Select Technologies';
+    }
+}
+
 function resetAddSiteForm() {
     document.getElementById('addSiteForm').reset();
     document.getElementById('siteInterface').innerHTML = '<option value="">Select Interface (Optional)</option>';
     resetSelectById('siteVendor');
     resetSelectById('siteRouter');
     resetSelectById('siteInterface');
-    resetSelectById('siteTechnologies');
+    resetTechMultiselect();
 }
 
 async function addSite() {
     const siteId = document.getElementById('siteId').value;
     const siteName = document.getElementById('siteName').value;
     const techSelect = document.getElementById('siteTechnologies');
-    const selectedTechnologies = Array.from(techSelect.selectedOptions).map(option => option.value);
+    const selectedTechnologies = Array.from(techSelect.querySelectorAll('.tech-checkbox:checked')).map(cb => cb.value);
     const vendorId = document.getElementById('siteVendor').value;
     const routerId = document.getElementById('siteRouter').value;
     const interfaceId = document.getElementById('siteInterface').value;
