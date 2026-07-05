@@ -921,10 +921,17 @@ window.openEditModal = function(siteId) {
     const svlan = site.service_vlan_number || 'N/A';
     const ovlan = site.om_vlan_number || 'N/A';
     document.getElementById('currentVlansLabel').textContent = `SVLAN: ${svlan}, OMVLAN: ${ovlan}`;
-    
+
     // Reset radio buttons
     document.getElementById('editVlanKeep').checked = true;
     document.getElementById('editManualVlanDiv').style.display = 'none';
+    
+    // Add event listener to clear focus when modal hides (fixes aria-hidden warning)
+    document.getElementById('editSiteModal').addEventListener('hidden.bs.modal', function () {
+        if (document.activeElement) {
+            document.activeElement.blur();
+        }
+    }, { once: true });
     
     editSiteModalInstance.show();
 };
@@ -961,16 +968,29 @@ async function populateEditManualVlans() {
             loadingMessage: 'Fetching available VLANs...'
         });
         
-        select.innerHTML = '<option value="">-- Select VLAN Pair --</option>';
+        select.innerHTML = '<option value="" disabled selected>-- Select VLAN Pair --</option>';
         if (response.vlans && response.vlans.length > 0) {
             response.vlans.forEach(v => {
                 select.innerHTML += `<option value="${v.service_vlan_id}">${v.label}</option>`;
             });
         } else {
-            select.innerHTML = '<option value="">No free VLANs available for this interface</option>';
+            select.innerHTML = '<option value="" disabled selected>No free VLANs available for this interface</option>';
+        }
+        
+        // Update searchable dropdown UI
+        if (select.dataset.searchable === 'true') {
+            select.dispatchEvent(new Event('rebuildSearchable'));
+            // Trigger change to update the displayed text
+            select.dispatchEvent(new Event('change'));
+        } else if (window.initSearchableDropdown) {
+            window.initSearchableDropdown(select);
         }
     } catch (error) {
-        select.innerHTML = '<option value="">Failed to load VLANs</option>';
+        select.innerHTML = '<option value="" disabled selected>Failed to load VLANs</option>';
+        if (select.dataset.searchable === 'true') {
+            select.dispatchEvent(new Event('rebuildSearchable'));
+            select.dispatchEvent(new Event('change'));
+        }
     }
 }
 

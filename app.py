@@ -174,11 +174,19 @@ def login():
 @login_required
 def api_events():
     from flask import Response
+    import queue
     def stream():
         messages = announcer.listen()
-        while True:
-            msg = messages.get()
-            yield msg
+        try:
+            while True:
+                try:
+                    msg = messages.get(timeout=15)
+                    yield msg
+                except queue.Empty:
+                    yield format_sse('{"type": "ping"}')
+        finally:
+            if messages in announcer.listeners:
+                announcer.listeners.remove(messages)
 
     return Response(stream(), mimetype='text/event-stream')
 
@@ -2801,8 +2809,10 @@ def api_get_available_vlans():
         service_vlan_query = VLAN.query.filter(
             ((VLAN.vendor_id == vendor.id) | (VLAN.vendor == vendor.name)),
             VLAN.type == tech_name,
-            VLAN.pair_id.isnot(None),
-            VLAN.pair_type == 'service'
+            db.or_(
+                VLAN.pair_id.is_(None),
+                VLAN.pair_type == 'service'
+            )
         )
         
         if used_vlan_ids:
@@ -2812,14 +2822,23 @@ def api_get_available_vlans():
         
         result = []
         for sv in available_service_vlans:
-            om_vlan = VLAN.query.filter_by(pair_id=sv.pair_id, pair_type='om').first()
-            if om_vlan and (not used_vlan_ids or om_vlan.id not in used_vlan_ids):
+            if sv.pair_id and sv.pair_type == 'service':
+                om_vlan = VLAN.query.filter_by(pair_id=sv.pair_id, pair_type='om').first()
+                if om_vlan and (not used_vlan_ids or om_vlan.id not in used_vlan_ids):
+                    result.append({
+                        'service_vlan_id': sv.id,
+                        'service_vlan_number': sv.vlan_id,
+                        'om_vlan_id': om_vlan.id,
+                        'om_vlan_number': om_vlan.vlan_id,
+                        'label': f"Service: {sv.vlan_id} | OM: {om_vlan.vlan_id}"
+                    })
+            else:
                 result.append({
                     'service_vlan_id': sv.id,
                     'service_vlan_number': sv.vlan_id,
-                    'om_vlan_id': om_vlan.id,
-                    'om_vlan_number': om_vlan.vlan_id,
-                    'label': f"Service: {sv.vlan_id} | OM: {om_vlan.vlan_id}"
+                    'om_vlan_id': None,
+                    'om_vlan_number': 'N/A',
+                    'label': f"VLAN: {sv.vlan_id}"
                 })
                 
         return jsonify({'vlans': result}), 200
@@ -2863,27 +2882,33 @@ def api_edit_site(site_id):
             vendor_name = site.vendor_obj.name if site.vendor_obj else None
             
             if vlan_mode == 'auto':
-                # Find first free pair
+                # Find first free pair or single
                 service_vlan_query = VLAN.query.filter(
                     ((VLAN.vendor_id == site.vendor_id) | (VLAN.vendor == vendor_name)),
                     VLAN.type == site.technology_type,
-                    VLAN.pair_id.isnot(None),
-                    VLAN.pair_type == 'service'
+                    db.or_(
+                        VLAN.pair_id.is_(None),
+                        VLAN.pair_type == 'service'
+                    )
                 )
                 if used_vlan_ids:
                     service_vlan_query = service_vlan_query.filter(~VLAN.id.in_(used_vlan_ids))
                     
                 new_service_vlan = service_vlan_query.first()
                 if not new_service_vlan:
-                    return jsonify({'error': 'No available service VLAN pairs for auto-assignment'}), 400
+                    return jsonify({'error': 'No available service VLANs for auto-assignment'}), 400
                     
-                new_om_vlan = VLAN.query.filter_by(pair_id=new_service_vlan.pair_id, pair_type='om').first()
-                if not new_om_vlan or (used_vlan_ids and new_om_vlan.id in used_vlan_ids):
-                    return jsonify({'error': 'No available OM VLAN pair for auto-assignment'}), 400
+                if new_service_vlan.pair_id and new_service_vlan.pair_type == 'service':
+                    new_om_vlan = VLAN.query.filter_by(pair_id=new_service_vlan.pair_id, pair_type='om').first()
+                    if not new_om_vlan or (used_vlan_ids and new_om_vlan.id in used_vlan_ids):
+                        return jsonify({'error': 'No available OM VLAN pair for auto-assignment'}), 400
+                    site.om_vlan_id = new_om_vlan.id
+                    log_msg += f", Auto-assigned VLANs: SVLAN {new_service_vlan.vlan_id}, OMVLAN {new_om_vlan.vlan_id}"
+                else:
+                    site.om_vlan_id = None
+                    log_msg += f", Auto-assigned VLAN: SVLAN {new_service_vlan.vlan_id}"
                     
                 site.service_vlan_id = new_service_vlan.id
-                site.om_vlan_id = new_om_vlan.id
-                log_msg += f", Auto-assigned VLANs: SVLAN {new_service_vlan.vlan_id}, OMVLAN {new_om_vlan.vlan_id}"
                 
             elif vlan_mode == 'manual':
                 if not manual_service_vlan_id:
@@ -2893,13 +2918,17 @@ def api_edit_site(site_id):
                 if not new_service_vlan or new_service_vlan.id in used_vlan_ids:
                     return jsonify({'error': 'Selected service VLAN is invalid or already in use on this interface'}), 400
                     
-                new_om_vlan = VLAN.query.filter_by(pair_id=new_service_vlan.pair_id, pair_type='om').first()
-                if not new_om_vlan or new_om_vlan.id in used_vlan_ids:
-                    return jsonify({'error': 'Selected OM VLAN pair is invalid or already in use on this interface'}), 400
+                if new_service_vlan.pair_id and new_service_vlan.pair_type == 'service':
+                    new_om_vlan = VLAN.query.filter_by(pair_id=new_service_vlan.pair_id, pair_type='om').first()
+                    if not new_om_vlan or new_om_vlan.id in used_vlan_ids:
+                        return jsonify({'error': 'Selected OM VLAN pair is invalid or already in use on this interface'}), 400
+                    site.om_vlan_id = new_om_vlan.id
+                    log_msg += f", Manually assigned VLANs: SVLAN {new_service_vlan.vlan_id}, OMVLAN {new_om_vlan.vlan_id}"
+                else:
+                    site.om_vlan_id = None
+                    log_msg += f", Manually assigned VLAN: SVLAN {new_service_vlan.vlan_id}"
                     
                 site.service_vlan_id = new_service_vlan.id
-                site.om_vlan_id = new_om_vlan.id
-                log_msg += f", Manually assigned VLANs: SVLAN {new_service_vlan.vlan_id}, OMVLAN {new_om_vlan.vlan_id}"
 
         db.session.commit()
         log_activity('edit_site', 'site', site.id, log_msg, site_name=site.site_name)

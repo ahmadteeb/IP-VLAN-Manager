@@ -80,27 +80,33 @@ window.hideLoader = hideLoader;
 window.updateLoaderProgress = updateLoaderProgress;
 
 // Global SSE Initialization
+let globalEventSource = null;
+
 function initSSE() {
-    if (window.EventSource) {
-        const source = new EventSource('/api/events');
-        source.onmessage = function(event) {
+    if (window.EventSource && !globalEventSource) {
+        globalEventSource = new EventSource('/api/events');
+        globalEventSource.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'update') {
-                    // Dispatch a custom event so other components can refresh
                     document.dispatchEvent(new CustomEvent('app:data_updated', { detail: data }));
                 } else if (data.type === 'progress') {
                     const percentage = Math.round((data.count / data.total) * 100);
                     const countStr = `${data.count}/${data.total}`;
                     updateLoaderProgress(percentage, countStr);
+                } else if (data.type === 'ping') {
+                    // Just a keep-alive ping, ignore
                 }
             } catch (e) {
                 console.error("Error parsing SSE data", e);
             }
         };
-        source.onerror = function(err) {
+        globalEventSource.onerror = function(err) {
             console.error("SSE Error:", err);
-            // Browser will automatically attempt to reconnect
+            // Browser will automatically attempt to reconnect, but let's clear our ref if it completely fails
+            if (globalEventSource && globalEventSource.readyState === EventSource.CLOSED) {
+                globalEventSource = null;
+            }
         };
     }
 }
@@ -108,6 +114,7 @@ function initSSE() {
 document.addEventListener('DOMContentLoaded', function() {
     initSSE();
 });
+
 
 // Theme Toggle & Layout Behaviour
 document.addEventListener('DOMContentLoaded', function() {
