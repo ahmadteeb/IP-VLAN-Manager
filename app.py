@@ -730,10 +730,10 @@ def api_add_vlan():
             
             # Create OM VLAN if creating pair
             if create_pair:
-                if idx >= len(om_vlan_ids_to_create):
+                if (idx - 1) >= len(om_vlan_ids_to_create):
                     db.session.rollback()
                     return jsonify({'error': f'Index out of range: service VLAN {vid} has no matching OM VLAN'}), 400
-                om_vid = om_vlan_ids_to_create[idx]
+                om_vid = om_vlan_ids_to_create[idx - 1]
                 om_vlan = VLAN(
                     vlan_id=om_vid,
                     type=f"{tech_name}_OM",
@@ -1056,7 +1056,7 @@ def api_add_ip():
                 
                 # Create OM IP if creating pair
                 if create_pair:
-                    om_gw = om_gateway_ips[idx]
+                    om_gw = om_gateway_ips[idx - 1]
                     om_ip = IP(
                         gateway=om_gw['gateway'],
                         subnet_mask=om_subnet_mask,
@@ -1371,11 +1371,11 @@ def api_delete_ip(ip_id):
     if ip.sites_service or ip.sites_om:
         return jsonify({'error': 'Cannot delete IP assigned to a site'}), 400
     
-    ip_address = ip.ip_address
+    ip_gateway = ip.gateway
     db.session.delete(ip)
     db.session.commit()
     
-    log_activity('delete_ip', 'ip', ip_id, ip_address)
+    log_activity('delete_ip', 'ip', ip_id, ip_gateway)
     return jsonify({'message': 'IP deleted successfully'}), 200
 
 @app.route('/api/ips/bulk-delete', methods=['POST'])
@@ -1402,7 +1402,7 @@ def api_bulk_delete_ips():
         total_deletable = len(deletable)
         for i, ip in enumerate(deletable, 1):
             emit_progress(i, total_deletable)
-            log_activity('delete_ip', 'ip', ip.id, ip.ip_address)
+            log_activity('delete_ip', 'ip', ip.id, ip.gateway)
             db.session.delete(ip)
         db.session.commit()
 
