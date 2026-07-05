@@ -647,9 +647,12 @@ async function openTransferModal(selectedSiteIds) {
         const selectedSites = selectedSiteIds.map(id => selectedSitesData.get(id)).filter(Boolean);
 
         const sitesList = document.getElementById('selectedSitesList');
-        sitesList.innerHTML = selectedSites.map(s =>
-            `<div><strong>${s.site_id}</strong> - ${s.site_name}</div>`
-        ).join('');
+        sitesList.innerHTML = selectedSites.map(s => {
+            const techs = s.technologies && s.technologies.length > 0 
+                ? s.technologies.join(', ') 
+                : (s.technology_type || 'N/A');
+            return `<div class="mb-1"><strong>${s.site_id}</strong> - ${s.site_name} <span class="badge bg-secondary ms-2">${techs} - ${s.vendor || 'N/A'}</span></div>`;
+        }).join('');
 
         // Load routers and reset interface
         await loadRoutersForTransfer();
