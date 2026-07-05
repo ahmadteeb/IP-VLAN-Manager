@@ -1,7 +1,7 @@
 // Searchable Dropdown Enhancement
 // Converts regular select elements into searchable dropdowns with modern design
 
-(function() {
+(function () {
     'use strict';
 
     function createSearchableDropdown(selectElement) {
@@ -172,7 +172,7 @@
                     optionDiv.classList.add('selected');
                 }
 
-                optionDiv.addEventListener('click', function(e) {
+                optionDiv.addEventListener('click', function (e) {
                     e.stopPropagation();
                     selectElement.selectedIndex = index;
                     selectElement.dispatchEvent(new Event('change', { bubbles: true }));
@@ -180,7 +180,7 @@
                     closeDropdown();
                 });
 
-                optionDiv.addEventListener('mouseenter', function() {
+                optionDiv.addEventListener('mouseenter', function () {
                     dropdownMenu.querySelectorAll('.searchable-dropdown-option').forEach(opt => {
                         opt.classList.remove('hover');
                     });
@@ -204,8 +204,16 @@
             isFetching = true;
             try {
                 console.log(`[SearchableDropdown] Fetching data from ${apiEndpoint} with search term: "${searchTerm}"`);
-                
-                const url = `${apiEndpoint}?search=${encodeURIComponent(searchTerm)}&per_page=100`;
+
+                let extraParams = '';
+                if (selectElement.dataset.dependsOn) {
+                    const dependentEl = document.getElementById(selectElement.dataset.dependsOn);
+                    if (dependentEl && dependentEl.value) {
+                        extraParams = `&router_id=${dependentEl.value}`;
+                    }
+                }
+
+                const url = `${apiEndpoint}?search=${encodeURIComponent(searchTerm)}&per_page=100${extraParams}`;
                 const response = await fetch(url, {
                     headers: {
                         'Content-Type': 'application/json'
@@ -224,11 +232,11 @@
                 if (items.length > 0) {
                     // Store current selected value
                     const currentValue = selectElement.value;
-                    
+
                     // Clear existing options except placeholder
                     const placeholderOption = selectElement.options[0];
                     const placeholderText = placeholderOption && placeholderOption.value === '' ? placeholderOption.text : 'Select...';
-                    
+
                     selectElement.innerHTML = '';
                     if (placeholderText !== 'Select...' || placeholderOption) {
                         const placeholder = document.createElement('option');
@@ -255,7 +263,7 @@
 
                     // Rebuild dropdown options
                     buildOptions();
-                    
+
                     // Re-filter with current search term
                     filterOptions(searchTerm);
                 } else {
@@ -339,7 +347,7 @@
             customSelect.classList.remove('active');
             searchInput.value = '';
             filteredOptions = [];
-            
+
             // Clear any pending fetch timeout
             if (fetchTimeout) {
                 clearTimeout(fetchTimeout);
@@ -348,7 +356,7 @@
         }
 
         // Event listeners
-        customSelect.addEventListener('click', function(e) {
+        customSelect.addEventListener('click', function (e) {
             e.stopPropagation();
             if (isOpen) {
                 closeDropdown();
@@ -357,12 +365,12 @@
             }
         });
 
-        searchInput.addEventListener('input', function(e) {
+        searchInput.addEventListener('input', function (e) {
             e.stopPropagation();
             filterOptions(this.value);
         });
 
-        searchInput.addEventListener('keydown', function(e) {
+        searchInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const hovered = dropdownMenu.querySelector('.searchable-dropdown-option.hover');
@@ -403,7 +411,7 @@
             }
         });
 
-        customSelect.addEventListener('keydown', function(e) {
+        customSelect.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 openDropdown();
@@ -411,10 +419,16 @@
         });
 
         // Close when clicking outside
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', function (e) {
             if (!wrapper.contains(e.target)) {
                 closeDropdown();
             }
+        });
+
+        // Rebuild options on custom event
+        selectElement.addEventListener('rebuildSearchable', function () {
+            buildOptions();
+            updateDisplay();
         });
 
         // Update display when select changes
@@ -444,7 +458,7 @@
 
     // Re-initialize after dynamic content loads (for modals)
     const originalShow = bootstrap.Modal.prototype.show;
-    bootstrap.Modal.prototype.show = function() {
+    bootstrap.Modal.prototype.show = function () {
         const result = originalShow.apply(this, arguments);
         setTimeout(() => {
             const modal = this._element;
@@ -462,15 +476,19 @@
     };
 
     // Export function for manual initialization
-    window.initSearchableDropdown = function(selectElement) {
+    window.initSearchableDropdown = function (selectElement) {
         if (selectElement) {
-            createSearchableDropdown(selectElement);
+            if (selectElement.dataset.searchable === 'true') {
+                selectElement.dispatchEvent(new Event('rebuildSearchable'));
+            } else {
+                createSearchableDropdown(selectElement);
+            }
         } else {
             initSearchableDropdowns();
         }
     };
 
-    window.resetSelectElement = function(selectElement) {
+    window.resetSelectElement = function (selectElement) {
         if (!selectElement) {
             return;
         }
