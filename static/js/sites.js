@@ -201,12 +201,10 @@ async function loadTechnologiesForSitesPage() {
         if (multi) {
             multi.innerHTML = techs.map(t => `
                 <li>
-                    <div class="form-check px-3 py-1 dropdown-item">
-                        <input class="form-check-input tech-checkbox" type="checkbox" value="${t.name}" id="tech_${t.name.replace(/\s+/g, '_')}">
-                        <label class="form-check-label w-100" for="tech_${t.name.replace(/\s+/g, '_')}" style="cursor:pointer">
-                            ${t.name}
-                        </label>
-                    </div>
+                    <label class="dropdown-item d-flex align-items-center gap-2 py-2 m-0" for="tech_${t.name.replace(/\s+/g, '_')}" style="cursor:pointer; user-select:none;">
+                        <input class="form-check-input tech-checkbox m-0" type="checkbox" value="${t.name}" id="tech_${t.name.replace(/\s+/g, '_')}">
+                        <span class="fw-medium">${t.name}</span>
+                    </label>
                 </li>
             `).join('');
             
