@@ -3,35 +3,51 @@ let loaderElement = null;
 let loaderTextElement = null;
 let loaderCounter = 0;
 let loaderTimer = null;
+let loaderProgressContainer = null;
+let loaderProgressBar = null;
+let loaderProgressText = null;
 
 function ensureLoaderElements() {
     if (!loaderElement) {
         loaderElement = document.getElementById('globalLoader');
         loaderTextElement = document.getElementById('globalLoaderText');
+        loaderProgressContainer = document.getElementById('globalLoaderProgressContainer');
+        loaderProgressBar = document.getElementById('globalLoaderProgressBar');
+        loaderProgressText = document.getElementById('globalLoaderProgressText');
     }
 }
 
 function activateLoader() {
-    if (!loaderElement) {
-        return;
-    }
+    if (!loaderElement) return;
     loaderElement.classList.add('active');
+}
+
+function updateLoaderProgress(percentage, countStr) {
+    ensureLoaderElements();
+    if (loaderProgressContainer && loaderProgressBar && loaderProgressText) {
+        if (percentage >= 0) {
+            loaderProgressContainer.style.display = 'flex';
+            loaderProgressText.style.display = 'block';
+            loaderProgressBar.style.width = percentage + '%';
+            loaderProgressBar.setAttribute('aria-valuenow', percentage);
+            loaderProgressText.textContent = countStr ? `${percentage}% (${countStr})` : `${percentage}%`;
+        } else {
+            loaderProgressContainer.style.display = 'none';
+            loaderProgressText.style.display = 'none';
+        }
+    }
 }
 
 function showLoader(message = 'Loading...', delay = 250) {
     ensureLoaderElements();
-    if (!loaderElement) {
-        return;
-    }
+    if (!loaderElement) return;
 
     loaderCounter += 1;
     if (loaderTextElement) {
         loaderTextElement.textContent = message;
     }
     if (loaderCounter === 1) {
-        if (loaderTimer) {
-            clearTimeout(loaderTimer);
-        }
+        if (loaderTimer) clearTimeout(loaderTimer);
         loaderTimer = setTimeout(() => {
             activateLoader();
             loaderTimer = null;
@@ -43,9 +59,7 @@ function showLoader(message = 'Loading...', delay = 250) {
 
 function hideLoader(force = false) {
     ensureLoaderElements();
-    if (!loaderElement) {
-        return;
-    }
+    if (!loaderElement) return;
 
     loaderCounter = force ? 0 : Math.max(loaderCounter - 1, 0);
     if (loaderCounter === 0) {
@@ -57,11 +71,43 @@ function hideLoader(force = false) {
         if (loaderTextElement) {
             loaderTextElement.textContent = 'Loading...';
         }
+        updateLoaderProgress(-1);
     }
 }
 
 window.showLoader = showLoader;
 window.hideLoader = hideLoader;
+window.updateLoaderProgress = updateLoaderProgress;
+
+// Global SSE Initialization
+function initSSE() {
+    if (window.EventSource) {
+        const source = new EventSource('/api/events');
+        source.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'update') {
+                    // Dispatch a custom event so other components can refresh
+                    document.dispatchEvent(new CustomEvent('app:data_updated', { detail: data }));
+                } else if (data.type === 'progress') {
+                    const percentage = Math.round((data.count / data.total) * 100);
+                    const countStr = `${data.count}/${data.total}`;
+                    updateLoaderProgress(percentage, countStr);
+                }
+            } catch (e) {
+                console.error("Error parsing SSE data", e);
+            }
+        };
+        source.onerror = function(err) {
+            console.error("SSE Error:", err);
+            // Browser will automatically attempt to reconnect
+        };
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initSSE();
+});
 
 // Theme Toggle & Layout Behaviour
 document.addEventListener('DOMContentLoaded', function() {

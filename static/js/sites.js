@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 let selectedSiteIds = new Set();
+let selectedSitesData = new Map();
 
 function setupEventListeners() {
     const addBtn = document.getElementById('addSiteBtn');
@@ -161,10 +162,14 @@ function setupEventListeners() {
             const checkboxes = document.querySelectorAll('.site-checkbox');
             checkboxes.forEach(cb => {
                 cb.checked = this.checked;
+                const siteId = parseInt(cb.value);
                 if (this.checked) {
-                    selectedSiteIds.add(parseInt(cb.value));
+                    selectedSiteIds.add(siteId);
+                    const site = window._sitesPage.find(s => s.id === siteId);
+                    if (site) selectedSitesData.set(siteId, site);
                 } else {
-                    selectedSiteIds.delete(parseInt(cb.value));
+                    selectedSiteIds.delete(siteId);
+                    selectedSitesData.delete(siteId);
                 }
             });
             updateTransferButton();
@@ -176,6 +181,13 @@ function setupEventListeners() {
         loadSites();
     }, 500));
     
+    // Listen for real-time SSE updates
+    document.addEventListener('app:data_updated', function(e) {
+        const res = e.detail.resource;
+        if (res === 'all' || res === 'sites' || res === 'vlans' || res === 'ips' || res === 'interfaces' || res === 'routers') {
+            loadSites();
+        }
+    });
 }
 
 async function loadTechnologiesForSitesPage() {
@@ -374,8 +386,11 @@ async function copyGeneratedConfigToClipboard() {
 function toggleSiteSelection(siteId, isChecked) {
     if (isChecked) {
         selectedSiteIds.add(siteId);
+        const site = window._sitesPage.find(s => s.id === siteId);
+        if (site) selectedSitesData.set(siteId, site);
     } else {
         selectedSiteIds.delete(siteId);
+        selectedSitesData.delete(siteId);
     }
     updateTransferButton();
     updateSelectAllCheckbox();
@@ -580,9 +595,8 @@ async function loadInterfacesForTransferRouter(routerId) {
 
 async function openTransferModal(selectedSiteIds) {
     try {
-        // Get site info from API
-        const sitesData = await apiRequest(window.API_URLS.sites);
-        const selectedSites = sitesData.sites.filter(s => selectedSiteIds.includes(s.id));
+        // Use globally tracked site objects to preserve selection across pages
+        const selectedSites = selectedSiteIds.map(id => selectedSitesData.get(id)).filter(Boolean);
         
         const sitesList = document.getElementById('selectedSitesList');
         sitesList.innerHTML = selectedSites.map(s => 

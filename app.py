@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.exceptions import abort
-from waitress import serve
+from gevent.pywsgi import WSGIServer
 from models.models import db, User, IP, VLAN, ActivityLog, Router, Interface, Site, StatusType, Vendor, PasswordState, Technology, Role, Permission
 from config import Config
 from datetime import datetime
@@ -12,8 +12,47 @@ import ipaddress
 import io
 from sqlalchemy.exc import IntegrityError
 
+import gevent.queue as queue
+import json
+
 app = Flask(__name__)
 app.config.from_object(Config)
+
+class MessageAnnouncer:
+    def __init__(self):
+        self.listeners = []
+
+    def listen(self):
+        q = queue.Queue(maxsize=100)
+        self.listeners.append(q)
+        return q
+
+    def announce(self, msg):
+        for i in reversed(range(len(self.listeners))):
+            try:
+                self.listeners[i].put_nowait(msg)
+            except queue.Full:
+                del self.listeners[i]
+
+announcer = MessageAnnouncer()
+
+def format_sse(data: str, event=None) -> str:
+    msg = f'data: {data}\n\n'
+    if event is not None:
+        msg = f'event: {event}\n{msg}'
+    return msg
+
+def emit_progress(current, total):
+    try:
+        from gevent import sleep
+        announcer.announce(format_sse(json.dumps({
+            "type": "progress",
+            "count": current,
+            "total": total
+        })))
+        sleep(0)
+    except Exception:
+        pass
 
 # Initialize extensions
 db.init_app(app)
@@ -21,6 +60,15 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
+
+from sqlalchemy import event
+
+@event.listens_for(db.session, 'after_commit')
+def receive_after_commit(session):
+    try:
+        announcer.announce(format_sse(json.dumps({"type": "update", "resource": "all"})))
+    except Exception as e:
+        app.logger.error(f'Error broadcasting update: {str(e)}')
 
 
 @login_manager.user_loader
@@ -121,6 +169,31 @@ def login():
             flash('Invalid username or password', 'error')
     
     return render_template('login.html')
+
+@app.route('/api/events')
+@login_required
+def api_events():
+    from flask import Response
+    def stream():
+        messages = announcer.listen()
+        while True:
+            msg = messages.get()
+            yield msg
+
+    return Response(stream(), mimetype='text/event-stream')
+
+@app.route('/.well-known/<path:filename>')
+def well_known(filename):
+    import os
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(app.root_path, '.well-known'), filename)
+
+@app.route('/favicon.ico')
+def favicon():
+    import os
+    from flask import send_from_directory
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 @app.route('/logout')
 @login_required
@@ -626,7 +699,9 @@ def api_add_vlan():
     created_om = []
     try:
         import uuid
-        for idx, vid in enumerate(vlan_ids_to_create):
+        total_vids = len(vlan_ids_to_create)
+        for idx, vid in enumerate(vlan_ids_to_create, 1):
+            emit_progress(idx, total_vids)
             # Generate unique pair_id for each pair
             pair_id = None
             if create_pair:
@@ -763,19 +838,13 @@ def api_get_ips():
             IP.pair_type == 'service'
         ))
         
-        # Get all service IPs for sorting (we need to sort before pagination)
-        all_service_ips = service_query.all()
-        # Sort IPs numerically by IP address
-        all_service_ips.sort(key=lambda ip: ipaddress.IPv4Address(ip.gateway))
+        # Use database pagination to avoid loading all IPs into memory and sorting in Python (which causes 504 timeouts)
+        # We order by ID which roughly corresponds to insertion/IP order for bulk subnets
+        pagination = service_query.order_by(IP.id.asc()).paginate(page=page, per_page=per_page, error_out=False)
         
-        # Apply pagination manually after sorting
-        total_count = len(all_service_ips)
-        start_idx = (page - 1) * per_page
-        end_idx = start_idx + per_page
-        paginated_service_ips = all_service_ips[start_idx:end_idx]
-        
-        # Return only service IPs - their to_dict() method will include pair_gateway for OM IPs
-        total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
+        paginated_service_ips = pagination.items
+        total_count = pagination.total
+        total_pages = pagination.pages
         
         app.logger.info(f'IP pagination: page={page}, per_page={per_page}, total={total_count}, pages={total_pages}')
         
@@ -945,7 +1014,19 @@ def api_add_ip():
             # Create gateway IPs with pairs
             created_ips = []
             created_om_ips = []
-            for idx, service_gw in enumerate(service_gateway_ips):
+            total_ips = len(service_gateway_ips)
+            for idx, service_gw in enumerate(service_gateway_ips, 1):
+                try:
+                    announcer.announce(format_sse(json.dumps({
+                        "type": "progress",
+                        "count": idx,
+                        "total": total_ips
+                    })))
+                    from gevent import sleep
+                    sleep(0)
+                except Exception:
+                    pass
+                
                 # Generate unique pair_id for each pair
                 pair_id = None
                 if create_pair:
@@ -1068,7 +1149,9 @@ def api_add_ip():
             # Create all IPs
             created_ips = []
             created_om_ips = []
-            for idx, ip_addr in enumerate(host_ips):
+            total_host_ips = len(host_ips)
+            for idx, ip_addr in enumerate(host_ips, 1):
+                emit_progress(idx, total_host_ips)
                 # Generate unique pair_id for each pair
                 pair_id = None
                 if create_pair:
@@ -1308,7 +1391,9 @@ def api_bulk_delete_ips():
         protected = [ip for ip in ips if (ip.sites_service or ip.sites_om)]
 
         # Delete in-session
-        for ip in deletable:
+        total_deletable = len(deletable)
+        for i, ip in enumerate(deletable, 1):
+            emit_progress(i, total_deletable)
             log_activity('delete_ip', 'ip', ip.id, ip.ip_address)
             db.session.delete(ip)
         db.session.commit()
@@ -1567,7 +1652,19 @@ def api_generate_site_configs():
             return jsonify({'error': f'Site IDs not found: {missing_ids}'}), 404
 
         configs = []
-        for site in sites:
+        total_sites = len(sites)
+        for i, site in enumerate(sites, 1):
+            try:
+                announcer.announce(format_sse(json.dumps({
+                    "type": "progress",
+                    "count": i,
+                    "total": total_sites
+                })))
+                from gevent import sleep
+                sleep(0)
+            except Exception:
+                pass
+            
             blocks = build_site_config_blocks(site)
             for block in blocks:
                 configs.append({
@@ -1667,7 +1764,18 @@ def api_add_site():
         created_sites = []
         assigned_ips = []  # Track assigned IPs to avoid duplicates
         
-        for tech_name in tech_names:
+        for i, tech_name in enumerate(tech_names, 1):
+            try:
+                announcer.announce(format_sse(json.dumps({
+                    "type": "progress",
+                    "count": i,
+                    "total": len(tech_names)
+                })))
+                from gevent import sleep
+                sleep(0)
+            except Exception:
+                pass
+                
             # First try to find free service IP with pair (preferred)
             # Use case-insensitive matching for technology type to handle any case variations
             service_ip_query = IP.query.filter(
@@ -2242,7 +2350,19 @@ def api_bulk_import_sites():
         created_sites = []  # Collect sites for activity logging after commit
         
         try:
-            for site_data in validated_rows:
+            total_rows = len(validated_rows)
+            for i, site_data in enumerate(validated_rows, 1):
+                try:
+                    announcer.announce(format_sse(json.dumps({
+                        "type": "progress",
+                        "count": i,
+                        "total": total_rows
+                    })))
+                    from gevent import sleep
+                    sleep(0)
+                except Exception:
+                    pass
+                    
                 # Create site
                 site = Site(
                     site_id=site_data['site_id'],
@@ -2352,7 +2472,9 @@ def api_release_sites():
     
     released_sites = []
     
-    for site in sites:
+    total_sites = len(sites)
+    for i, site in enumerate(sites, 1):
+        emit_progress(i, total_sites)
         # Free up IPs (both service and OM if using pairs)
         if site.service_ip_id:
             service_ip = IP.query.get(site.service_ip_id)
@@ -2481,8 +2603,21 @@ def api_transfer_sites():
             used_vlan_ids.append(s.om_vlan_id)
     
     transferred_sites = []
+    total_sites = len(sites)
     
-    for site in sites:
+    for i, site in enumerate(sites, 1):
+        # Emit progress event
+        try:
+            announcer.announce(format_sse(json.dumps({
+                "type": "progress",
+                "count": i,
+                "total": total_sites
+            })))
+            from gevent import sleep
+            sleep(0)  # Yield to allow SSE to flush
+        except Exception:
+            pass
+            
         # Store old router and interface info for logging
         old_router = site.interface.router.name if site.interface and site.interface.router else None
         old_interface = site.interface.name if site.interface else None
@@ -3072,7 +3207,8 @@ def api_export_sites():
         'Router', 'Router IP', 'Interface', 'Assigned Date'
     ])
     
-    for site in sites:
+    for i, site in enumerate(sites, 1):
+        emit_progress(i, len(sites))
         # Each site now has a single technology_type; expose it as a one-element list
         tech_list = [site.technology_type] if site.technology_type else []
 
@@ -3370,4 +3506,6 @@ if __name__ == '__main__':
     if Config.DEBUG:
         app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG)
     else:
-        serve(app, host=Config.HOST, port=Config.PORT)
+        app.logger.info(f"Starting server with gevent on {Config.HOST}:{Config.PORT}")
+        http_server = WSGIServer((Config.HOST, Config.PORT), app)
+        http_server.serve_forever()
