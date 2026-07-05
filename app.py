@@ -2848,7 +2848,7 @@ def api_get_available_vlans():
 
 @app.route('/api/sites/<int:site_id>', methods=['PUT'])
 @login_required
-@permission_required('sites.add')
+@permission_required('sites.update')
 def api_edit_site(site_id):
     """Edit site attributes (Site Name, Site ID, VLANs)"""
     try:
@@ -3504,6 +3504,7 @@ def init_permissions():
         # Site permissions
         {'name': 'View Sites', 'code': 'sites.view', 'description': 'View site list and details', 'category': 'sites', 'required_permissions': []},
         {'name': 'Add Sites', 'code': 'sites.add', 'description': 'Add new sites', 'category': 'sites', 'required_permissions': ['vendors.view', 'technologies.view', 'routers.view', 'interfaces.view', 'sites.view']},
+        {'name': 'Update Sites', 'code': 'sites.update', 'description': 'Update site information and VLANs', 'category': 'sites', 'required_permissions': ['vendors.view', 'technologies.view', 'routers.view', 'interfaces.view', 'sites.view']},
         {'name': 'Release Sites', 'code': 'sites.release', 'description': 'Release assigned sites', 'category': 'sites', 'required_permissions': ['sites.view']},
         {'name': 'Transfer Sites', 'code': 'sites.transfer', 'description': 'Transfer sites to other router/interface', 'category': 'sites', 'required_permissions': ['sites.view', 'routers.view', 'interfaces.view']},
         {'name': 'Import Sites', 'code': 'sites.import', 'description': 'Import sites from Excel', 'category': 'sites', 'required_permissions': ['sites.view']},
