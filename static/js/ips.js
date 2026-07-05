@@ -143,6 +143,7 @@ function setupEventListeners() {
     
     document.getElementById('searchInput').addEventListener('input', debounce(function() {
         currentPage = 1;
+        selectedIpIds.clear();
         loadIPs();
     }, 500));
     

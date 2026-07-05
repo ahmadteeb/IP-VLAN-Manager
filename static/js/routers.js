@@ -51,6 +51,7 @@ function setupEventListeners() {
 
     document.getElementById('searchInput').addEventListener('input', debounce(function() {
         currentPage = 1;
+        selectedRouterIds.clear();
         loadRouters();
     }, 500));
     
