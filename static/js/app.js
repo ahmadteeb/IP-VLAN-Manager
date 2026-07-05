@@ -83,8 +83,8 @@ window.updateLoaderProgress = updateLoaderProgress;
 let globalEventSource = null;
 
 function initSSE() {
-    if (window.EventSource && !globalEventSource) {
-        globalEventSource = new EventSource('/api/events');
+    if (window.EventSource && !globalEventSource && window.API_URLS && window.API_URLS.events) {
+        globalEventSource = new EventSource(window.API_URLS.events);
         globalEventSource.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
