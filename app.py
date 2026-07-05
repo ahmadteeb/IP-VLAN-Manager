@@ -2763,6 +2763,157 @@ def api_get_available_ips():
         'count': len(ips)
     })
 
+@app.route('/api/vlans/available', methods=['GET'])
+@login_required
+@permission_required('sites.add')
+def api_get_available_vlans():
+    """Get available VLANs for a specific technology, vendor, and interface"""
+    try:
+        technology = request.args.get('technology')
+        vendor_id = request.args.get('vendor_id')
+        interface_id = request.args.get('interface_id')
+        
+        if not all([technology, vendor_id, interface_id]):
+            return jsonify({'error': 'Technology, vendor_id, and interface_id are required'}), 400
+            
+        tech_name = parse_technology(technology)
+        if not tech_name:
+            return jsonify({'error': 'Invalid technology'}), 400
+            
+        vendor = Vendor.query.get(vendor_id)
+        if not vendor:
+            return jsonify({'error': 'Invalid vendor ID'}), 400
+            
+        # Get VLANs currently used on this interface (excluding the site itself if passed)
+        exclude_site_id = request.args.get('exclude_site_id', type=int)
+        
+        used_vlan_ids = []
+        site_query = Site.query.filter_by(interface_id=interface_id)
+        if exclude_site_id:
+            site_query = site_query.filter(Site.id != exclude_site_id)
+            
+        for s in site_query.all():
+            if s.service_vlan_id:
+                used_vlan_ids.append(s.service_vlan_id)
+            if s.om_vlan_id:
+                used_vlan_ids.append(s.om_vlan_id)
+                
+        service_vlan_query = VLAN.query.filter(
+            ((VLAN.vendor_id == vendor.id) | (VLAN.vendor == vendor.name)),
+            VLAN.type == tech_name,
+            VLAN.pair_id.isnot(None),
+            VLAN.pair_type == 'service'
+        )
+        
+        if used_vlan_ids:
+            service_vlan_query = service_vlan_query.filter(~VLAN.id.in_(used_vlan_ids))
+            
+        available_service_vlans = service_vlan_query.all()
+        
+        result = []
+        for sv in available_service_vlans:
+            om_vlan = VLAN.query.filter_by(pair_id=sv.pair_id, pair_type='om').first()
+            if om_vlan and (not used_vlan_ids or om_vlan.id not in used_vlan_ids):
+                result.append({
+                    'service_vlan_id': sv.id,
+                    'service_vlan_number': sv.vlan_id,
+                    'om_vlan_id': om_vlan.id,
+                    'om_vlan_number': om_vlan.vlan_id,
+                    'label': f"Service: {sv.vlan_id} | OM: {om_vlan.vlan_id}"
+                })
+                
+        return jsonify({'vlans': result}), 200
+    except Exception as e:
+        app.logger.error(f'Error getting available VLANs: {str(e)}', exc_info=True)
+        return jsonify({'error': 'Failed to fetch available VLANs'}), 500
+
+@app.route('/api/sites/<int:site_id>', methods=['PUT'])
+@login_required
+@permission_required('sites.add')
+def api_edit_site(site_id):
+    """Edit site attributes (Site Name, Site ID, VLANs)"""
+    try:
+        site = Site.query.get_or_404(site_id)
+        data = request.json
+        
+        new_site_id = data.get('site_id')
+        new_site_name = data.get('site_name')
+        vlan_mode = data.get('vlan_mode', 'keep') # keep, auto, manual
+        manual_service_vlan_id = data.get('manual_service_vlan_id')
+        
+        if not new_site_id or not new_site_name:
+            return jsonify({'error': 'Site ID and Site Name are required'}), 400
+            
+        # Update basics
+        old_name = site.site_name
+        old_id = site.site_id
+        site.site_id = new_site_id
+        site.site_name = new_site_name
+        
+        log_msg = f"Updated name '{old_name}' -> '{new_site_name}', ID '{old_id}' -> '{new_site_id}'"
+        
+        # Handle VLAN changes
+        if vlan_mode != 'keep' and site.interface_id:
+            # Gather used vlans on interface
+            used_vlan_ids = []
+            for s in Site.query.filter(Site.interface_id == site.interface_id, Site.id != site.id).all():
+                if s.service_vlan_id: used_vlan_ids.append(s.service_vlan_id)
+                if s.om_vlan_id: used_vlan_ids.append(s.om_vlan_id)
+                
+            vendor_name = site.vendor_obj.name if site.vendor_obj else None
+            
+            if vlan_mode == 'auto':
+                # Find first free pair
+                service_vlan_query = VLAN.query.filter(
+                    ((VLAN.vendor_id == site.vendor_id) | (VLAN.vendor == vendor_name)),
+                    VLAN.type == site.technology_type,
+                    VLAN.pair_id.isnot(None),
+                    VLAN.pair_type == 'service'
+                )
+                if used_vlan_ids:
+                    service_vlan_query = service_vlan_query.filter(~VLAN.id.in_(used_vlan_ids))
+                    
+                new_service_vlan = service_vlan_query.first()
+                if not new_service_vlan:
+                    return jsonify({'error': 'No available service VLAN pairs for auto-assignment'}), 400
+                    
+                new_om_vlan = VLAN.query.filter_by(pair_id=new_service_vlan.pair_id, pair_type='om').first()
+                if not new_om_vlan or (used_vlan_ids and new_om_vlan.id in used_vlan_ids):
+                    return jsonify({'error': 'No available OM VLAN pair for auto-assignment'}), 400
+                    
+                site.service_vlan_id = new_service_vlan.id
+                site.om_vlan_id = new_om_vlan.id
+                log_msg += f", Auto-assigned VLANs: SVLAN {new_service_vlan.vlan_id}, OMVLAN {new_om_vlan.vlan_id}"
+                
+            elif vlan_mode == 'manual':
+                if not manual_service_vlan_id:
+                    return jsonify({'error': 'Manual VLAN selection requires a service VLAN ID'}), 400
+                    
+                new_service_vlan = VLAN.query.get(manual_service_vlan_id)
+                if not new_service_vlan or new_service_vlan.id in used_vlan_ids:
+                    return jsonify({'error': 'Selected service VLAN is invalid or already in use on this interface'}), 400
+                    
+                new_om_vlan = VLAN.query.filter_by(pair_id=new_service_vlan.pair_id, pair_type='om').first()
+                if not new_om_vlan or new_om_vlan.id in used_vlan_ids:
+                    return jsonify({'error': 'Selected OM VLAN pair is invalid or already in use on this interface'}), 400
+                    
+                site.service_vlan_id = new_service_vlan.id
+                site.om_vlan_id = new_om_vlan.id
+                log_msg += f", Manually assigned VLANs: SVLAN {new_service_vlan.vlan_id}, OMVLAN {new_om_vlan.vlan_id}"
+
+        db.session.commit()
+        log_activity('edit_site', 'site', site.id, log_msg, site_name=site.site_name)
+        
+        return jsonify({
+            'message': 'Site updated successfully',
+            'site': site.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error editing site {site_id}: {str(e)}', exc_info=True)
+        return jsonify({'error': f'Failed to update site: {str(e)}'}), 500
+
 # User Management Routes
 @app.route('/users')
 @login_required

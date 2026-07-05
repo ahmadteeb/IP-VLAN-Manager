@@ -226,12 +226,23 @@ async function loadSites() {
     }
 }
 
+let currentSitesMap = new Map();
+
 function renderSitesTable(sites) {
     const tbody = document.getElementById('siteTableBody');
+    currentSitesMap.clear();
+    sites.forEach(s => currentSitesMap.set(s.id, s));
     
     // Check if checkbox column exists
     const hasCheckbox = document.getElementById('selectAllSites') !== null;
-    const colspan = hasCheckbox ? 12 : 11;
+    
+    // Check if Actions column exists
+    let hasActions = false;
+    document.querySelectorAll('th').forEach(th => {
+        if (th.textContent.trim() === 'Actions') hasActions = true;
+    });
+    
+    const colspan = hasCheckbox ? (hasActions ? 13 : 12) : (hasActions ? 12 : 11);
     
     if (sites.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No sites found</td></tr>`;
@@ -282,6 +293,11 @@ function renderSitesTable(sites) {
             <td title="${routerName}">${routerName}</td>
             <td><code title="${routerIp}">${routerIp}</code></td>
             <td title="${interfaceName}">${interfaceDisplay}</td>
+            ${hasActions ? `<td>
+                <button class="btn btn-sm btn-outline-primary" onclick="openEditModal(${site.id})" title="Edit Site">
+                    <i class="fas fa-edit"></i>
+                </button>
+            </td>` : ''}
         </tr>
         `;
     }).join('');
@@ -876,4 +892,123 @@ async function bulkImportSites() {
         confirmBtn.innerHTML = originalText;
     }
 }
+
+// --- Edit Site Logic ---
+let editSiteModalInstance = null;
+
+window.openEditModal = function(siteId) {
+    if (!editSiteModalInstance) {
+        editSiteModalInstance = new bootstrap.Modal(document.getElementById('editSiteModal'));
+    }
+    
+    const site = currentSitesMap.get(siteId);
+    if (!site) return;
+    
+    document.getElementById('editSiteIdHidden').value = site.id;
+    document.getElementById('editSiteTechHidden').value = site.technology_type;
+    document.getElementById('editSiteVendorIdHidden').value = site.vendor_id;
+    document.getElementById('editSiteInterfaceIdHidden').value = site.interface_id;
+    
+    document.getElementById('editSiteId').value = site.site_id;
+    document.getElementById('editSiteName').value = site.site_name;
+    document.getElementById('editSiteTechVendor').value = `${site.technology_type || 'N/A'} - ${site.vendor || 'N/A'}`;
+    document.getElementById('editSiteRouterInterface').value = `${site.router_name || 'N/A'} - ${site.interface_name || 'N/A'}`;
+    
+    const sip = site.service_gateway_ip || 'N/A';
+    const oip = site.om_gateway_ip || 'N/A';
+    document.getElementById('editSiteIp').value = `Service: ${sip} | OM: ${oip}`;
+    
+    const svlan = site.service_vlan_number || 'N/A';
+    const ovlan = site.om_vlan_number || 'N/A';
+    document.getElementById('currentVlansLabel').textContent = `SVLAN: ${svlan}, OMVLAN: ${ovlan}`;
+    
+    // Reset radio buttons
+    document.getElementById('editVlanKeep').checked = true;
+    document.getElementById('editManualVlanDiv').style.display = 'none';
+    
+    editSiteModalInstance.show();
+};
+
+document.querySelectorAll('input[name="editVlanMode"]').forEach(radio => {
+    radio.addEventListener('change', async function() {
+        const manualDiv = document.getElementById('editManualVlanDiv');
+        if (this.value === 'manual') {
+            manualDiv.style.display = 'block';
+            await populateEditManualVlans();
+        } else {
+            manualDiv.style.display = 'none';
+        }
+    });
+});
+
+async function populateEditManualVlans() {
+    const tech = document.getElementById('editSiteTechHidden').value;
+    const vendorId = document.getElementById('editSiteVendorIdHidden').value;
+    const interfaceId = document.getElementById('editSiteInterfaceIdHidden').value;
+    const siteId = document.getElementById('editSiteIdHidden').value;
+    
+    const select = document.getElementById('editManualVlanSelect');
+    select.innerHTML = '<option value="">Loading...</option>';
+    
+    if (!tech || !vendorId || !interfaceId) {
+        select.innerHTML = '<option value="">Cannot load VLANs (missing site data)</option>';
+        return;
+    }
+    
+    try {
+        const response = await apiRequest(`/api/vlans/available?technology=${encodeURIComponent(tech)}&vendor_id=${vendorId}&interface_id=${interfaceId}&exclude_site_id=${siteId}`, {
+            showLoading: true,
+            loadingMessage: 'Fetching available VLANs...'
+        });
+        
+        select.innerHTML = '<option value="">-- Select VLAN Pair --</option>';
+        if (response.vlans && response.vlans.length > 0) {
+            response.vlans.forEach(v => {
+                select.innerHTML += `<option value="${v.service_vlan_id}">${v.label}</option>`;
+            });
+        } else {
+            select.innerHTML = '<option value="">No free VLANs available for this interface</option>';
+        }
+    } catch (error) {
+        select.innerHTML = '<option value="">Failed to load VLANs</option>';
+    }
+}
+
+document.getElementById('saveEditSiteBtn')?.addEventListener('click', async () => {
+    const id = document.getElementById('editSiteIdHidden').value;
+    const site_id = document.getElementById('editSiteId').value.trim();
+    const site_name = document.getElementById('editSiteName').value.trim();
+    const vlan_mode = document.querySelector('input[name="editVlanMode"]:checked').value;
+    const manual_service_vlan_id = document.getElementById('editManualVlanSelect').value;
+    
+    if (!site_id || !site_name) {
+        showToast('Validation Error', 'Site ID and Site Name are required.', 'warning');
+        return;
+    }
+    
+    if (vlan_mode === 'manual' && !manual_service_vlan_id) {
+        showToast('Validation Error', 'Please select a VLAN pair.', 'warning');
+        return;
+    }
+    
+    try {
+        await apiRequest(`/api/sites/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                site_id,
+                site_name,
+                vlan_mode,
+                manual_service_vlan_id: manual_service_vlan_id ? parseInt(manual_service_vlan_id) : null
+            }),
+            showLoading: true,
+            loadingMessage: 'Saving changes...'
+        });
+        
+        showToast('Success', 'Site updated successfully.', 'success');
+        editSiteModalInstance.hide();
+        loadSites();
+    } catch (error) {
+        showToast('Error', error.message || 'Failed to update site.', 'error');
+    }
+});
 

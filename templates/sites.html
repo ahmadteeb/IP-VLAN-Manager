@@ -70,6 +70,9 @@
                         <th>Router</th>
                         <th>Router IP</th>
                         <th>Interface</th>
+                        {% if current_user.has_permission('sites.add') %}
+                        <th>Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody id="siteTableBody"></tbody>
@@ -252,6 +255,76 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Edit Site Modal -->
+<div class="modal fade" id="editSiteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Site</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editSiteForm">
+                    <input type="hidden" id="editSiteIdHidden">
+                    <input type="hidden" id="editSiteTechHidden">
+                    <input type="hidden" id="editSiteVendorIdHidden">
+                    <input type="hidden" id="editSiteInterfaceIdHidden">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Site ID *</label>
+                        <input type="text" class="form-control" id="editSiteId" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Site Name *</label>
+                        <input type="text" class="form-control" id="editSiteName" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Technology & Vendor</label>
+                        <input type="text" class="form-control" id="editSiteTechVendor" readonly disabled>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Router & Interface</label>
+                        <input type="text" class="form-control" id="editSiteRouterInterface" readonly disabled>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">IP Address</label>
+                        <input type="text" class="form-control" id="editSiteIp" readonly disabled>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">VLAN Assignment</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="editVlanMode" id="editVlanKeep" value="keep" checked>
+                            <label class="form-check-label" for="editVlanKeep">Keep Current VLANs (<span id="currentVlansLabel"></span>)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="editVlanMode" id="editVlanAuto" value="auto">
+                            <label class="form-check-label" for="editVlanAuto">Auto-assign new free VLANs</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="editVlanMode" id="editVlanManual" value="manual">
+                            <label class="form-check-label" for="editVlanManual">Manually select free VLANs</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="editManualVlanDiv" style="display: none;">
+                        <label class="form-label">Select Free VLAN Pair</label>
+                        <select class="form-select" id="editManualVlanSelect"></select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEditSiteBtn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
