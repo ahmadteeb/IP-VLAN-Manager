@@ -996,7 +996,7 @@ async function populateEditManualVlans() {
     }
 
     try {
-        const response = await apiRequest(`/api/vlans/available?technology=${encodeURIComponent(tech)}&vendor_id=${vendorId}&interface_id=${interfaceId}&exclude_site_id=${siteId}`, {
+        const response = await apiRequest(`${window.API_URLS.availableVlans}?technology=${encodeURIComponent(tech)}&vendor_id=${vendorId}&interface_id=${interfaceId}&exclude_site_id=${siteId}`, {
             showLoading: true,
             loadingMessage: 'Fetching available VLANs...'
         });
@@ -1045,7 +1045,7 @@ document.getElementById('saveEditSiteBtn')?.addEventListener('click', async () =
     }
 
     try {
-        await apiRequest(`/api/sites/${id}`, {
+        await apiRequest(window.API_URLS.updateSite(id), {
             method: 'PUT',
             body: JSON.stringify({
                 site_id,

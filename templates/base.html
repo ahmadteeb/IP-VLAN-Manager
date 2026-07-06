@@ -317,6 +317,7 @@
             vlans: '{{ url_for("api_get_vlans") }}',
             addVlan: '{{ url_for("api_add_vlan") }}',
             deleteVlan: function(id) { return '{{ url_for("api_delete_vlan", vlan_id=0) }}'.replace('0', id); },
+            availableVlans: '{{ url_for("api_get_available_vlans") }}',
             
             // IPs
             ips: '{{ url_for("api_get_ips") }}',
@@ -328,6 +329,7 @@
             // Sites
             sites: '{{ url_for("api_get_sites") }}',
             addSite: '{{ url_for("api_add_site") }}',
+            updateSite: function(id) { return '{{ url_for("api_edit_site", site_id=0) }}'.replace('0', id); },
             releaseSite: function(id) { return '{{ url_for("api_release_site", site_id=0) }}'.replace('0', id); },
             bulkReleaseSites: '{{ url_for("api_release_sites") }}',
             transferCheck: '{{ url_for("api_transfer_sites_check") }}',
