@@ -406,17 +406,11 @@ async function copyGeneratedConfigToClipboard() {
         return;
     }
 
-    // Workaround for all browsers clipboard copy
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    document.body.appendChild(textarea);
-    textarea.select();
-    const isCopied = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    if (isCopied) {
+    try {
+        await navigator.clipboard.writeText(text);
         showToast('Success', 'Configuration copied to clipboard', 'success');
-    } else {
-        showToast('Error', 'Failed to copy configuration', 'error');
+    } catch (err) {
+        showToast('Error', err, 'error');
     }
 }
 
