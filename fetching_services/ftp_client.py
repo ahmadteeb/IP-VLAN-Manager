@@ -4,9 +4,9 @@ from datetime import datetime
 import zipfile
 import json
 
-HOST = "10.119.19.80"
-USERNAME = "ftpuser"
-PASSWORD = "Changeme_123"
+HOST = ""
+USERNAME = ""
+PASSWORD = ""
 
 
 class NCE_FTP:
