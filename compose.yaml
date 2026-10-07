@@ -1,0 +1,75 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ip_vlan_manager}
+      MYSQL_USER: ${MYSQL_USER:-ip_vlan_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    networks:
+      ip-vlan:
+        ipv4_address: 172.30.10.4
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -u\"$$MYSQL_USER\" -D \"$$MYSQL_DATABASE\" -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  app:
+    build: .
+    image: ip-vlan-manager:latest
+    container_name: ip-vlan-manager-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-5000}
+    ports:
+      - "${PORT:-5000}:${PORT:-5000}"
+    networks:
+      ip-vlan:
+        ipv4_address: 172.30.10.2
+    volumes:
+      - app-instance:/app/instance
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${PORT:-5000}/login', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  fetching_services:
+    build: .
+    image: ip-vlan-manager:latest
+    container_name: ip-vlan-manager-fetching-services
+    restart: unless-stopped
+    env_file: .env
+    command: ["python", "/app/fetching_services/scheduler.py"]
+    working_dir: /data
+    networks:
+      ip-vlan:
+        ipv4_address: 172.30.10.3
+    volumes:
+      - fetching-data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+
+networks:
+  ip-vlan:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+
+volumes:
+  mysql-data:
+  app-instance:
+  fetching-data:

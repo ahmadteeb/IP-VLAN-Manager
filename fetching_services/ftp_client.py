@@ -4,13 +4,15 @@ from datetime import datetime
 import zipfile
 import json
 
-HOST = ""
-USERNAME = ""
-PASSWORD = ""
+HOST = os.environ.get("FTP_HOST", "")
+USERNAME = os.environ.get("FTP_USERNAME", "")
+PASSWORD = os.environ.get("FTP_PASSWORD", "")
 
 
 class NCE_FTP:
     def __init__(self, download_path: str, host: str = HOST):
+        if not all((host, USERNAME, PASSWORD)):
+            raise ValueError("FTP_HOST, FTP_USERNAME and FTP_PASSWORD must be set")
         self.download_path = download_path
         os.makedirs(self.download_path, exist_ok=True)
         self.ftp = ftplib.FTP(host)

@@ -114,12 +114,58 @@ class Config:
 
 ### Environment Variables
 
+See `.env.example` for all app, FTP, and scheduling settings. Docker Compose
+loads `.env` automatically; when running Python directly, export the variables
+in your shell first.
+
 You can also configure the application using environment variables:
 - `HOST`: Server host (default: `localhost`)
 - `PORT`: Server port (default: `5000`)
 - `DEBUG`: Debug mode (default: `False`)
 - `SECRET_KEY`: Secret key for sessions
 - `DATABASE_URL`: Database connection string
+
+### Docker Compose
+
+Copy `.env.example` to `.env`, then set a random `SECRET_KEY`, your FTP
+credentials, `MYSQL_PASSWORD`, and `MYSQL_ROOT_PASSWORD`. The default
+`DATABASE_URL` connects both Python services to the included MySQL container.
+Use URL-safe passwords or URL-encode credentials in an explicit `DATABASE_URL`.
+MySQL creates the database and application user on first startup; the app
+creates tables and the initial admin account after MySQL is healthy.
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build -d
+docker compose logs -f fetching_services
+```
+
+This starts three containers: MySQL, the app at `http://localhost:5000` (or
+your `PORT`), and the fetching scheduler. The scheduler waits for the app to be healthy,
+then runs download, router update, and site update in order. A failed step
+stops that cycle; the scheduler retries at the next daily start time.
+
+Set `FETCH_START_TIME` to the daily start time in 24-hour `HH:MM` format
+(default `02:00`) and `TZ` to an IANA timezone (default `Asia/Amman`). The
+scheduler waits until the next scheduled time, including after a restart.
+Runs never overlap; if a run spans the next start time, that start is skipped.
+Recreate containers with `docker compose up -d --build` after changing `.env`.
+
+Reports and service log files persist in the `fetching-data` volume at `/data`.
+All containers join the bridge network `172.30.10.0/24`, with fixed addresses
+`172.30.10.2` (app), `172.30.10.3` (fetcher), and `172.30.10.4` (MySQL).
+Edit `compose.yaml` to change these addresses. Avoid overlaps with your LAN,
+VPN, or other Docker networks. These are Docker network addresses; access the
+app through the published host port as above. After changing an existing
+network's subnet, run `docker compose down` then `docker compose up -d --build`
+to recreate the network; named data volumes are preserved.
+
+MySQL data persists in the `mysql-data` volume and its port is available only
+inside the Docker network. `MYSQL_*` initialization settings apply only to an
+empty data volume; changing passwords in `.env` does not change existing
+database users. The app's instance directory also persists in a volume. For
+app-only local usage, `DATABASE_URL=sqlite:///ip_vlan_manager.db` is supported,
+but the fetching pipeline requires MySQL.
 
 ## 🚀 Usage
 

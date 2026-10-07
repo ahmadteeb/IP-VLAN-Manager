@@ -18,3 +18,4 @@ except Exception as e:
         f.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Error: {e}\n")
         f.write("--------------------------------\n")
+    raise

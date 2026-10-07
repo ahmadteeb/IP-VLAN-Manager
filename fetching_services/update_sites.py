@@ -117,3 +117,4 @@ except Exception as e:
         f.write(f"Error: {e}\n")
         f.write(f"Error traceback: {traceback.format_exc()}\n")
         f.write("--------------------------------\n")
+    raise
