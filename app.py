@@ -1962,19 +1962,12 @@ def api_add_site():
                     db.session.rollback()
                     return jsonify({'error': f'OM VLAN {om_vlan.vlan_id} is already used on this {vendor.vlan_scope}'}), 400
             
-            # Use the same site_id for all technologies (site_id can be duplicated for different technologies)
-            # But check if this site_id + technology combination already exists on this interface (if interface is specified)
-            if interface_id:
-                existing_site = Site.query.filter_by(
-                    site_id=site_id,
-                    technology_type=tech_name,
-                    interface_id=interface_id
-                ).first()
-                
-                if existing_site:
-                    app.logger.warning(f'Site ID "{site_id}" with technology "{tech_name}" already exists on interface {interface_id}')
-                    db.session.rollback()
-                    return jsonify({'error': f'Site ID "{site_id}" with technology "{tech_name}" already exists on this interface'}), 400
+            existing_site = Site.query.filter_by(
+                site_id=site_id, technology_type=tech_name, vendor_id=vendor_id
+            ).first()
+            if existing_site:
+                db.session.rollback()
+                return jsonify({'error': f'Site ID "{site_id}" with technology "{tech_name}" already exists for this vendor'}), 400
             
             # Create site for this technology with pair assignments (or unpaired if pairs not available)
             site = Site(
@@ -2322,17 +2315,15 @@ def api_bulk_import_sites():
                             errors.append(f'Row {row_num}: OM VLAN {om_vlan.vlan_id} is already used on this {vendor.vlan_scope}')
                             break
                     
-                    # Check for existing site
-                    if interface_id:
-                        existing_site = Site.query.filter_by(
-                            site_id=site_id,
-                            technology_type=tech_name,
-                            interface_id=interface_id
-                        ).first()
-                        
-                        if existing_site:
-                            errors.append(f'Row {row_num}: Site ID "{site_id}" with technology "{tech_name}" already exists on this interface')
-                            break
+                    existing_site = Site.query.filter_by(
+                        site_id=site_id, technology_type=tech_name, vendor_id=vendor.id
+                    ).first()
+                    pending_duplicate = any(
+                        item['site_id'] == site_id and item['tech_name'] == tech_name and item['vendor'].id == vendor.id
+                        for item in validated_rows + row_sites_data)
+                    if existing_site or pending_duplicate:
+                        errors.append(f'Row {row_num}: Site ID "{site_id}" with technology "{tech_name}" already exists for this vendor')
+                        break
                     
                     # Store validated data for insertion phase
                     row_sites_data.append({
@@ -2883,6 +2874,9 @@ def api_edit_site(site_id):
         
         if not new_site_id or not new_site_name:
             return jsonify({'error': 'Site ID and Site Name are required'}), 400
+        if Site.query.filter_by(site_id=new_site_id, technology_type=site.technology_type,
+                                vendor_id=site.vendor_id).filter(Site.id != site.id).first():
+            return jsonify({'error': 'Site ID and technology already exist for this vendor'}), 400
             
         # Update basics
         old_name = site.site_name
