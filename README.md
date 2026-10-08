@@ -201,7 +201,7 @@ default. Rebuild/restart the app to apply the schema change.
 
 ### Running Services
 
-The **Duplicated IP** page (`/duplicated-ip`) shows the latest successful
+The **Duplicated IPs** page (`/duplicated-ip`) shows the latest successful
 inventory scan to users with **View Duplicated IPs** (`duplicated_ips.view`)
 permission, available in Role Management under Duplicated IPs. This is separate
 from View IPs; non-admin roles must be granted it explicitly. An IPv4 address is flagged

@@ -53,9 +53,23 @@ function setupEventListeners() {
     }
     
     document.getElementById('confirmAddVlan').addEventListener('click', addVLAN);
-    document.getElementById('statusFilter').addEventListener('change', function() {
+    const applyFilters = function() {
         currentPage = 1;
+        selectedVlanIds.clear();
+        updateDeleteButton();
         loadVLANs();
+    };
+    document.getElementById('vlanFilters').addEventListener('submit', function(event) {
+        event.preventDefault();
+        applyFilters();
+    });
+    ['statusFilter', 'technologyFilter', 'vendorFilter'].forEach(id => {
+        document.getElementById(id).addEventListener('change', applyFilters);
+    });
+    document.getElementById('clearFilters').addEventListener('click', function() {
+        document.getElementById('searchInput').value = '';
+        ['statusFilter', 'technologyFilter', 'vendorFilter'].forEach(resetSelectById);
+        applyFilters();
     });
     
     // Delete selected button
@@ -114,6 +128,9 @@ async function loadVLANs() {
         per_page: perPage
     });
     if (status) params.append('status', status);
+    params.set('search', document.getElementById('searchInput').value.trim());
+    params.set('technology', document.getElementById('technologyFilter').value);
+    params.set('vendor', document.getElementById('vendorFilter').value);
     
     try {
         const data = await apiRequest(`${window.API_URLS.vlans}?${params}`);

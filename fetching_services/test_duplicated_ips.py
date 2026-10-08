@@ -27,6 +27,8 @@ class DuplicateIPTest(unittest.TestCase):
         with engine.connect() as conn:
             self.assertEqual(conn.execute(text('SELECT ip_id FROM duplicate_IPs')).scalar_one(), 3)
             self.assertEqual(conn.execute(text('SELECT id FROM ips')).scalar_one(), 3)
+            self.assertIsNone(conn.execute(text('SELECT service_name FROM duplicate_IPs')).scalar_one())
+            self.assertIsNone(conn.execute(text('SELECT vlan FROM duplicate_IPs')).scalar_one())
 
     def test_unassigned_address_markers(self):
         for value in (None, '', '  ', '--', ' -- ', 'NoIP', ' noip ', 'NOIP', '0.0.0.0'):
@@ -66,14 +68,18 @@ class DuplicateIPTest(unittest.TestCase):
         results = find_duplicates(elements, links, routers, ips, interfaces)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['ip_id'], 3)
-        self.assertEqual(results[0]['occurrences'], [{'router_id': 7, 'interface_id': 11}, {'router_id': 9, 'interface_id': 12}])
+        self.assertEqual(results[0]['occurrences'], [
+            {'router_id': 7, 'interface_id': 11, 'service_name': None, 'vlan': None},
+            {'router_id': 9, 'interface_id': 12, 'service_name': None, 'vlan': None}])
         ips[0]['type'] = '3G'
         self.assertEqual(find_duplicates(elements, links, routers, ips, interfaces), results)
         self.assertEqual(find_duplicates(elements, links, routers, [], interfaces), [])
         self.assertEqual(find_duplicates(elements, links, routers, ips, interfaces[:1]), [])
         # Inventory aliases/subinterfaces resolving to the same ID are counted once.
         links.append({'ne-id': 'a', 'addrv4': '10.0.0.1', 'name': 'p1.100'})
-        self.assertEqual(find_duplicates(elements, links, routers, ips, interfaces), results)
+        subinterface_results = find_duplicates(elements, links, routers, ips, interfaces)
+        self.assertEqual(len(subinterface_results[0]['occurrences']), 2)
+        self.assertEqual(subinterface_results[0]['occurrences'][0]['vlan'], 100)
         routers.append({'id': 10, 'router_ip': '10.61.1.1'})
         self.assertEqual(find_duplicates(elements, links, routers, ips, interfaces), [])
 
@@ -89,10 +95,12 @@ class DuplicateIPTest(unittest.TestCase):
             conn.execute(text('CREATE TABLE interfaces (id INTEGER PRIMARY KEY, router_id INTEGER, name TEXT)'))
             conn.execute(text("INSERT INTO interfaces VALUES (11, 7, 'p1'), (12, 7, 'p2')"))
             conn.execute(text('PRAGMA foreign_keys=ON'))
+        remove_legacy_duplicate_ip_table(engine)
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, 'network-element.json').write_text(json.dumps([{'res-id': 'a', 'name': 'Router', 'ip-address': '10.61.1.1'}]))
             report = Path(directory, 'ltp-v2.json')
-            links = [{'ne-id': 'a', 'addrv4': '10.0.0.1', 'name': name} for name in ('p1', 'p2')]
+            links = [{'ne-id': 'a', 'addrv4': '10.0.0.1', 'name': name,
+                      'description': ' Service <LTE> '} for name in ('p1.100', 'p2.200')]
             links.append({'name': 'unnumbered'})
             links.append({'addrv4': ' -- ', 'name': 'placeholder'})
             links.append({'addrv4': 'NoIP', 'name': 'no-address'})
@@ -105,6 +113,8 @@ class DuplicateIPTest(unittest.TestCase):
                 self.assertEqual(saved[0]['router_id'], 7)
                 self.assertEqual([row['interface_id'] for row in saved], [11, 12])
                 self.assertIsNotNone(saved[0]['checked_at'])
+                self.assertEqual(saved[0]['service_name'], 'Service <LTE>')
+                self.assertEqual([row['vlan'] for row in saved], [100, 200])
             self.assertEqual(check_duplicated_ips(engine, directory), 1)
             report.write_text(json.dumps([{'addrv4': '10.0.0.1', 'name': 'missing-ne'}]))
             with self.assertRaisesRegex(ValueError, 'missing ne-id'):

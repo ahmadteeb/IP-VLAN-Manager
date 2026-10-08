@@ -61,9 +61,18 @@ def find_duplicates(elements, links, database_routers, database_ips, database_in
             logging.warning('Skipping interface %s on router ID %s: found %s matching interfaces', interface, router_id, len(interface_ids))
             continue
         interface_id = next(iter(interface_ids))
+        description = row.get('description')
+        if description is not None and not isinstance(description, str):
+            raise ValueError('Inventory description must be a string')
+        suffix = interface.rsplit('.', 1)[-1] if '.' in interface else ''
+        vlan = int(suffix) if suffix.isascii() and suffix.isdigit() else None
+        if vlan is not None and not 1 <= vlan <= 4094:
+            raise ValueError(f'Invalid VLAN number: {vlan}')
         key = (router_id, interface_id)
         addresses[(address, ip['id'])][key] = {
             'router_id': router_id, 'interface_id': interface_id,
+            'service_name': description.strip() or None if description is not None else None,
+            'vlan': vlan,
         }
     return [
         {'ip_id': ip_id, 'occurrences': sorted(occurrences.values(), key=lambda item: (item['router_id'], item['interface_id']))}
@@ -82,13 +91,14 @@ def check_duplicated_ips(engine, report_path='Reports'):
         results = find_duplicates(elements, links, routers, ips, interfaces)
         checked_at = datetime.now(timezone.utc).replace(tzinfo=None)
         rows = [{'ip_id': group['ip_id'], 'router_id': item['router_id'],
-                 'interface_id': item['interface_id'], 'checked_at': checked_at}
+                 'interface_id': item['interface_id'], 'checked_at': checked_at,
+                 'service_name': item['service_name'], 'vlan': item['vlan']}
                 for group in results for item in group['occurrences']]
         conn.execute(text('DELETE FROM `duplicate_IPs`'))
         if rows:
-            conn.execute(text('INSERT INTO `duplicate_IPs` (ip_id, router_id, interface_id, checked_at) '
-                              'VALUES (:ip_id, :router_id, :interface_id, :checked_at)'), rows)
-    logging.info('Duplicated IP scan complete: %s duplicated addresses', len(results))
+            conn.execute(text('INSERT INTO `duplicate_IPs` (ip_id, router_id, interface_id, checked_at, service_name, vlan) '
+                              'VALUES (:ip_id, :router_id, :interface_id, :checked_at, :service_name, :vlan)'), rows)
+    logging.info('Duplicated IPs scan complete: %s duplicated addresses', len(results))
     return len(results)
 
 

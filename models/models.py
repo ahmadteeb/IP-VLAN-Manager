@@ -16,6 +16,8 @@ class DuplicateIP(db.Model):
     router_id = db.Column(db.Integer, db.ForeignKey('routers.id', ondelete='CASCADE'), nullable=False, index=True)
     interface_id = db.Column(db.Integer, db.ForeignKey('interfaces.id', ondelete='CASCADE'), nullable=False, index=True)
     checked_at = db.Column(db.DateTime, nullable=False)
+    service_name = db.Column(db.Text, nullable=True)
+    vlan = db.Column(db.Integer, nullable=True)
     router = db.relationship('Router', lazy='joined')
     ip = db.relationship('IP', lazy='joined')
     interface = db.relationship('Interface', lazy='joined')

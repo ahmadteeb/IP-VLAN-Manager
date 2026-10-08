@@ -502,7 +502,8 @@ def api_delete_interface(interface_id):
 @login_required
 @permission_required('vlans.view')
 def vlans():
-    return render_template('vlans.html')
+    return render_template('vlans.html', filter_vendors=Vendor.query.order_by(Vendor.name).all(),
+                           filter_technologies=Technology.query.order_by(Technology.name).all())
 
 @app.route('/api/vlans', methods=['GET'])
 @login_required
@@ -514,7 +515,7 @@ def api_get_vlans():
     technology = request.args.get('technology')
     vendor = request.args.get('vendor')
     status = request.args.get('status')
-    search = request.args.get('search', '')
+    search = request.args.get('search', '').strip()
     
     query = VLAN.query
     
@@ -550,15 +551,21 @@ def api_get_vlans():
                 VLAN.id == Site.om_vlan_id
             )).filter(
                 db.or_(
-                    Site.site_name.like(f'%{search}%'),
-                    Site.site_id.like(f'%{search}%'),
-                    VLAN.vendor.like(f'%{search}%')
+                    Site.site_name.contains(search, autoescape=True),
+                    Site.site_id.contains(search, autoescape=True),
+                    VLAN.vendor.contains(search, autoescape=True),
+                    VLAN.vendor_obj.has(Vendor.name.contains(search, autoescape=True)),
+                    VLAN.type.contains(search, autoescape=True)
                 )
             ).distinct()
     
     # For pagination, we only count service VLANs (or unpaired VLANs) since that's what we display
     # This ensures pagination matches what's actually shown in the table
-    service_query = query.filter(db.or_(
+    # Keep a pair visible when its OM VLAN matches the filters or search.
+    matching_ids = query.with_entities(VLAN.id).subquery()
+    matching_pairs = query.with_entities(VLAN.pair_id).filter(VLAN.pair_id.isnot(None)).subquery()
+    service_query = VLAN.query.filter(db.or_(VLAN.id.in_(db.select(matching_ids)),
+                                            VLAN.pair_id.in_(db.select(matching_pairs)))).filter(db.or_(
         VLAN.pair_type.is_(None),
         VLAN.pair_type == 'service'
     ))
@@ -3507,7 +3514,7 @@ def init_permissions():
         {'name': 'Export VLANs', 'code': 'vlans.export', 'description': 'Export VLANs to Excel', 'category': 'vlans', 'required_permissions': ['vlans.view']},
         
         # Duplicated IP permissions
-        {'name': 'View Duplicated IPs', 'code': 'duplicated_ips.view', 'description': 'View duplicated IP addresses, technologies, routers and interfaces', 'category': 'duplicated_ips', 'required_permissions': []},
+        {'name': 'View Duplicated IPs', 'code': 'duplicated_ips.view', 'description': 'View duplicated IPs addresses, technologies, routers and interfaces', 'category': 'duplicated_ips', 'required_permissions': []},
 
         # IP permissions
         {'name': 'View IPs', 'code': 'ips.view', 'description': 'View IP address list and details', 'category': 'ips', 'required_permissions': []},
