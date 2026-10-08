@@ -1,6 +1,6 @@
 import logging
 import ipaddress
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy import text
@@ -10,7 +10,9 @@ from service_utils import load_report, run_service
 
 def update_routers(engine, report_path="Reports"):
     elements = load_report(report_path, "network-element.json", ("ip-address", "res-id", "name", "product-name"))
-    links = load_report(report_path, "ltp-v2.json", ("ne-id", "name", "is-physical", "is-sub-ltp", "mac"))
+    links = load_report(report_path, "ltp-v2.json", ())
+    inventory_names = {row['name'] for row in elements}
+    inventory_ips = {row['ip-address'] for row in elements}
     source = []
     names, addresses, identifiers = set(), set(), set()
     for row in elements:
@@ -30,15 +32,26 @@ def update_routers(engine, report_path="Reports"):
         source.append(row)
 
     interfaces = defaultdict(set)
-    for row in links:
-        if not isinstance(row["is-physical"], bool) or not isinstance(row["is-sub-ltp"], bool):
-            raise ValueError("Interface physical/sub-interface flags must be booleans")
-        if row["is-physical"] is True or (row["is-sub-ltp"] is False and row["mac"] not in (None, "", "00-00-00-00-00-00")):
-            if not isinstance(row["name"], str) or not row["name"].strip():
-                raise ValueError("Interface name must be a nonempty string")
+    skipped_interfaces = Counter()
+    for index, row in enumerate(links):
+        if row.get('ne-id') is None:
+            skipped_interfaces['missing ne-id'] += 1
+            continue
+        if row['ne-id'] not in identifiers:
+            continue
+        physical, sub_ltp, mac = row.get('is-physical'), row.get('is-sub-ltp'), row.get('mac')
+        if any(flag is not None and not isinstance(flag, bool) for flag in (physical, sub_ltp)):
+            raise ValueError(f"ltp-v2.json row {index}: physical/sub-interface flags must be booleans")
+        if physical is True or (sub_ltp is False and mac not in (None, "", "--", "00-00-00-00-00-00")):
+            if not isinstance(row.get("name"), str) or not row["name"].strip():
+                raise ValueError(f"ltp-v2.json row {index}: interface name must be a nonempty string")
             interfaces[row["ne-id"]].add(row["name"])
+        elif sub_ltp is not True and physical is not True:
+            skipped_interfaces['insufficient classification or MAC'] += 1
+    for reason, count in skipped_interfaces.items():
+        logging.warning('Skipped %s interface rows: %s', count, reason)
 
-    added = 0
+    added = skipped_routers = 0
     with engine.begin() as conn:
         routers = list(conn.execute(text("SELECT id, name, router_ip FROM routers")).mappings())
         by_name = {row["name"]: row for row in routers}
@@ -51,13 +64,19 @@ def update_routers(engine, report_path="Reports"):
             candidates = by_ip[row["ip-address"]]
             current = by_name.get(row["name"])
             if len(candidates) > 1 or (current and candidates and current["id"] != candidates[0]["id"]):
-                raise ValueError(f"Conflicting database routers for {row['name']}")
+                logging.warning('Skipped router %s (%s): name matches ID %s; IP matches IDs %s',
+                                row['name'], row['ip-address'], current['id'] if current else None,
+                                [candidate['id'] for candidate in candidates])
+                skipped_routers += 1
+                continue
             current = current or (candidates[0] if candidates else None)
             values = {"name": row["name"], "ip": row["ip-address"], "type": row["product-name"]}
             if current:
                 router_id = current["id"]
                 if router_id in matched:
-                    raise ValueError("Multiple inventory routers match the same database router")
+                    logging.warning('Skipped router %s: database router ID %s already matched', row['name'], router_id)
+                    skipped_routers += 1
+                    continue
                 conn.execute(text("UPDATE routers SET name=:name, router_ip=:ip, router_type=:type WHERE id=:id"), {**values, "id": router_id})
             else:
                 result = conn.execute(text("INSERT INTO routers (name, router_ip, router_type, created_at) VALUES (:name, :ip, :type, :created)"), {**values, "created": datetime.now(timezone.utc).replace(tzinfo=None)})
@@ -67,9 +86,23 @@ def update_routers(engine, report_path="Reports"):
                 if (router_id, name) not in existing:
                     conn.execute(text("INSERT INTO interfaces (router_id, name, created_at) VALUES (:id, :name, :created)"), {"id": router_id, "name": name, "created": datetime.now(timezone.utc).replace(tzinfo=None)})
                     added += 1
-        # Inventory exports may be incomplete; removals require an authoritative deletion feed.
-        logging.info("Processed %s routers; added %s interfaces; preserved absent records", len(source), added)
-    return len(source), added
+        removed = [row for row in routers if row['id'] not in matched
+                   and row['name'] not in inventory_names and row['router_ip'] not in inventory_ips]
+        for router in removed:
+            values = {'id': router['id']}
+            affected_sites = list(conn.execute(text('SELECT service_ip_id, om_ip_id FROM sites WHERE interface_id IN '
+                                                    '(SELECT id FROM interfaces WHERE router_id=:id)'), values).mappings())
+            conn.execute(text('DELETE FROM sites WHERE interface_id IN (SELECT id FROM interfaces WHERE router_id=:id)'), values)
+            for ip_id in {site[key] for site in affected_sites for key in ('service_ip_id', 'om_ip_id') if site[key] is not None}:
+                conn.execute(text("UPDATE ips SET status='FREE', assigned_date=NULL WHERE id=:ip_id "
+                                  'AND NOT EXISTS (SELECT 1 FROM sites WHERE service_ip_id=:ip_id OR om_ip_id=:ip_id)'), {'ip_id': ip_id})
+            conn.execute(text('DELETE FROM `duplicate_IPs` WHERE router_id=:id OR interface_id IN '
+                              '(SELECT id FROM interfaces WHERE router_id=:id)'), values)
+            conn.execute(text('DELETE FROM interfaces WHERE router_id=:id'), values)
+            conn.execute(text('DELETE FROM routers WHERE id=:id'), values)
+            logging.info('Removed router ID %s (%s), its interfaces and %s sites', router['id'], router['name'], len(affected_sites))
+        logging.info("Updated %s routers; skipped %s conflicts; added %s interfaces; removed %s routers", len(matched), skipped_routers, added, len(removed))
+    return len(matched), added
 
 
 if __name__ == "__main__":

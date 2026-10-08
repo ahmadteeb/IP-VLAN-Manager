@@ -113,6 +113,13 @@
                         <span class="menu-indicator"></span>
                     </a>
                 </li>
+                <li class="menu-item">
+                    <a href="{{ url_for('duplicated_ip') }}" class="menu-link {% if request.endpoint == 'duplicated_ip' %}active{% endif %}" title="Duplicated IP">
+                        <span class="menu-icon"><i class="fas fa-copy" aria-hidden="true"></i></span>
+                        <span class="menu-text">Duplicated IP</span>
+                        <span class="menu-indicator"></span>
+                    </a>
+                </li>
                 {% endif %}
                 
                 {% set has_resources = current_user.is_authenticated and (

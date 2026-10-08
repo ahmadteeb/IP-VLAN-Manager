@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 
 def run_cycle():
-    for script in ("download_files.py", "update_routers.py", "update_sites.py"):
+    for script in ("download_files.py", "update_routers.py", "update_sites.py", "check_duplicated_ips.py"):
         subprocess.run([sys.executable, str(Path(__file__).with_name(script))], check=True)
 
 

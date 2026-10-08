@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from service_utils import load_report, run_service
+from service_utils import load_ip_links, load_report, run_service
 
 
 def one(rows, label):
@@ -24,13 +24,16 @@ def vlan_id(link, vlans, current_id, vendor_id):
     candidates = [row for row in vlans if row["vlan_id"] == number]
     if vendor_id is not None:
         candidates = [row for row in candidates if row["vendor_id"] == vendor_id]
+    if not candidates:
+        logging.warning('VLAN %s has no matching database record for vendor %s; leaving VLAN unset', number, vendor_id)
+        return None
     current = [row for row in candidates if row["id"] == current_id]
     return one(current or candidates, f"VLAN {number}")["id"]
 
 
 def update_sites(engine, report_path="Reports"):
     elements = load_report(report_path, "network-element.json", ("res-id", "ip-address"))
-    links = load_report(report_path, "ltp-v2.json", ("ne-id", "addrv4"))
+    links = load_ip_links(report_path)
     by_ne, by_gateway = defaultdict(list), defaultdict(list)
     for row in elements:
         by_ne[row["res-id"]].append(row)
@@ -47,6 +50,7 @@ def update_sites(engine, report_path="Reports"):
         for row in conn.execute(text("SELECT id, router_id, name FROM interfaces")).mappings():
             interfaces[(row["router_id"], row["name"])].append(row)
         ips = {row["id"]: row["gateway"] for row in conn.execute(text("SELECT id, gateway FROM ips")).mappings()}
+        ip_ids = {gateway: ip_id for ip_id, gateway in ips.items()}
         vlans = list(conn.execute(text("SELECT id, vlan_id, vendor_id FROM vlans")).mappings())
         for site in sites:
             try:
@@ -61,15 +65,25 @@ def update_sites(engine, report_path="Reports"):
                 matches = {row["id"]: row for alias in aliases for row in interfaces[(router["id"], alias)]}
                 interface = one(list(matches.values()), "Interface")
                 service_vlan = vlan_id(service, vlans, site["service_vlan_id"], site["vendor_id"])
-                om_vlan = None
-                if site["om_ip_id"] is not None:
-                    om = one(by_gateway[ips.get(site["om_ip_id"])], "OM IP")
-                    om_vlan = vlan_id(om, vlans, site["om_vlan_id"], site["vendor_id"])
+                service_ip_id = ip_ids[service['addrv4']]
+                om_ip_id = site['om_ip_id'] if site['om_ip_id'] in ips else None
+                om_vlan = site['om_vlan_id'] if om_ip_id is not None else None
+                if om_ip_id is not None:
+                    om_matches = by_gateway[ips[om_ip_id]]
+                    if om_matches:
+                        om = one(om_matches, "OM IP")
+                        om_ip_id = ip_ids[om['addrv4']]
+                        om_vlan = vlan_id(om, vlans, site["om_vlan_id"], site["vendor_id"])
+                    else:
+                        logging.warning('Site %s: OM IP not in inventory; preserving OM assignments', site['site_id'])
             except (ValueError, TypeError) as error:
                 skipped += 1
                 logging.warning("Skipped site %s (%s): %s", site["site_id"], site["id"], error)
                 continue
-            conn.execute(text("UPDATE sites SET service_vlan_id=:service, om_vlan_id=:om, interface_id=:interface WHERE id=:id"), {"service": service_vlan, "om": om_vlan, "interface": interface["id"], "id": site["id"]})
+            conn.execute(text("UPDATE sites SET service_ip_id=:service_ip, om_ip_id=:om_ip, "
+                              "service_vlan_id=:service, om_vlan_id=:om, interface_id=:interface WHERE id=:id"),
+                         {"service_ip": service_ip_id, "om_ip": om_ip_id, "service": service_vlan,
+                          "om": om_vlan, "interface": interface["id"], "id": site["id"]})
             updated += 1
     logging.info("Sites updated: %s; skipped: %s", updated, skipped)
     return updated, skipped

@@ -10,6 +10,8 @@ services:
     networks:
       ip-vlan:
         ipv4_address: 172.30.10.4
+    ports:
+      - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:

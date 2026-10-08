@@ -4,6 +4,8 @@ from werkzeug.exceptions import abort
 from gevent.pywsgi import WSGIServer
 from models.models import db, User, IP, VLAN, ActivityLog, Router, Interface, Site, StatusType, Vendor, PasswordState, Technology, Role, Permission
 from config import Config
+from models.models import DuplicateIP
+from duplicate_ip_migration import remove_legacy_duplicate_ip_table
 from datetime import datetime
 import csv
 import math
@@ -799,6 +801,28 @@ def api_delete_vlan(vlan_id):
 @permission_required('ips.view')
 def ips():
     return render_template('ips.html')
+
+@app.route('/duplicated-ip')
+@login_required
+@permission_required('ips.view')
+def duplicated_ip():
+    query = DuplicateIP.query.join(DuplicateIP.router).join(DuplicateIP.ip).join(DuplicateIP.interface)
+    search = request.args.get('search', '').strip()
+    if search:
+        query = query.filter(db.or_(IP.gateway.contains(search, autoescape=True),
+                                   IP.type.contains(search, autoescape=True),
+                                   Interface.name.contains(search, autoescape=True),
+                                   Router.name.contains(search, autoescape=True),
+                                   Router.router_ip.contains(search, autoescape=True)))
+    page = max(1, request.args.get('page', 1, type=int))
+    total = query.count()
+    pages = max(1, math.ceil(total / 25))
+    page = min(page, pages)
+    results = query.order_by(IP.gateway, DuplicateIP.router_id, DuplicateIP.interface_id).offset((page-1)*25).limit(25).all()
+    checked_at = db.session.query(db.func.max(DuplicateIP.checked_at)).scalar()
+    return render_template('duplicated_ip.html', checked_at=checked_at, results=results,
+                           total=total, page=page, pages=pages, search=search)
+
 
 @app.route('/api/ips', methods=['GET'])
 @login_required
@@ -3603,7 +3627,11 @@ def init_db():
     with app.app_context():
         # Create all database tables
         app.logger.info('Creating database tables if they do not exist...')
+        remove_legacy_duplicate_ip_table(db.engine)
         db.create_all()
+        # The old table contains only regenerable scan results.
+        with db.engine.begin() as conn:
+            conn.exec_driver_sql('DROP TABLE IF EXISTS duplicate_ip_scans')
         
         # Initialize permissions and roles
         init_permissions()

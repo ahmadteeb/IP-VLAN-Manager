@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Duplicated IP - IP/VLAN Manager{% endblock %}
+{% block page_title %}Duplicated IP{% endblock %}
+{% block page_subtitle %}Duplicate inventory IPs classified by technology from the IP table{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title">{{ total }} duplicate IP occurrence{{ '' if total == 1 else 's' }}</h5>
+        <p class="mb-0 text-muted">
+            {% if checked_at %}Results checked: {{ checked_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC.
+            {% else %}No duplicate records stored. Results update after the scheduled inventory check.{% endif %}
+        </p>
+    </div>
+    <div class="card-body">
+        <form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3">
+            <div><label for="duplicateSearch" class="form-label">Search IP, technology, router or interface</label>
+            <input type="search" id="duplicateSearch" name="search" class="form-control" value="{{ search }}"></div>
+            <button type="submit" class="btn btn-primary">Search</button>
+            {% if search %}<a href="{{ url_for('duplicated_ip') }}" class="btn btn-outline-secondary">Clear</a>{% endif %}
+        </form>
+        {% if results %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <caption>One row per router/interface. Technology comes from the matching IP record.</caption>
+                <thead><tr><th scope="col">IP address</th><th scope="col">Technology</th><th scope="col">Router ID</th><th scope="col">Router</th><th scope="col">Router IP</th><th scope="col">Interface</th><th scope="col">Checked at (UTC)</th></tr></thead>
+                <tbody>{% for row in results %}
+                    <tr><th scope="row">{{ row.ip.gateway }}</th><td>{{ row.ip.type }}</td><td>{{ row.router_id }}</td>
+                        <td>{{ row.router.name }}</td><td>{{ row.router.router_ip }}</td><td>{{ row.interface.name }}</td><td>{{ row.checked_at.strftime('%Y-%m-%d %H:%M:%S') }}</td></tr>
+                {% endfor %}</tbody>
+            </table>
+        </div>
+        {% else %}<p role="status">{{ 'No matching duplicated IPs.' if search else 'No duplicate IP records to display.' }}</p>{% endif %}
+        {% if pages > 1 %}
+        <nav aria-label="Duplicated IP pages" class="d-flex gap-3 align-items-center">
+            {% if page > 1 %}<a href="{{ url_for('duplicated_ip', page=page-1, search=search) }}" class="btn btn-outline-primary">Previous</a>{% endif %}
+            <span>Page {{ page }} of {{ pages }}</span>
+            {% if page < pages %}<a href="{{ url_for('duplicated_ip', page=page+1, search=search) }}" class="btn btn-outline-primary">Next</a>{% endif %}
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

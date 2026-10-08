@@ -7,6 +7,20 @@ import enum
 
 db = SQLAlchemy()
 
+
+class DuplicateIP(db.Model):
+    __tablename__ = 'duplicate_IPs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ip_id = db.Column(db.Integer, db.ForeignKey('ips.id', ondelete='CASCADE'), nullable=False, index=True)
+    router_id = db.Column(db.Integer, db.ForeignKey('routers.id', ondelete='CASCADE'), nullable=False, index=True)
+    interface_id = db.Column(db.Integer, db.ForeignKey('interfaces.id', ondelete='CASCADE'), nullable=False, index=True)
+    checked_at = db.Column(db.DateTime, nullable=False)
+    router = db.relationship('Router', lazy='joined')
+    ip = db.relationship('IP', lazy='joined')
+    interface = db.relationship('Interface', lazy='joined')
+    __table_args__ = (UniqueConstraint('ip_id', 'router_id', 'interface_id', name='uq_duplicate_ip_interface'),)
+
 # Association table for Role-Permission many-to-many relationship
 role_permissions = Table(
     'role_permissions',

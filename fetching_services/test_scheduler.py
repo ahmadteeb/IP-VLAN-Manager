@@ -15,7 +15,7 @@ class SchedulerTest(unittest.TestCase):
             scheduler.run_cycle()
             self.assertEqual(
                 [Path(call.args[0][1]).name for call in run.call_args_list],
-                ["download_files.py", "update_routers.py", "update_sites.py"],
+                ["download_files.py", "update_routers.py", "update_sites.py", "check_duplicated_ips.py"],
             )
             self.assertTrue(all(call.kwargs["check"] for call in run.call_args_list))
         with patch.object(scheduler.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "download")) as run:
