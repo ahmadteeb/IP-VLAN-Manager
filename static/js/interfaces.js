@@ -1,6 +1,7 @@
 let selectedInterfaceIds = new Set();
 let currentPage = 1;
 const perPage = 50;
+let interfacesRequestId = 0;
 
 function resetSelectById(id) {
     const select = document.getElementById(id);
@@ -38,9 +39,18 @@ function setupEventListeners() {
     }
     
     document.getElementById('confirmAddInterface').addEventListener('click', addInterface);
-    document.getElementById('routerFilter').addEventListener('change', function() {
+    function applyFilters() {
         currentPage = 1;
+        selectedInterfaceIds.clear();
+        updateDeleteButton();
+        updateSelectAllCheckbox();
         loadInterfaces();
+    }
+    document.getElementById('routerFilter').addEventListener('change', applyFilters);
+    document.getElementById('searchInput').addEventListener('input', debounce(applyFilters, 300));
+    document.getElementById('clearFiltersBtn').addEventListener('click', function() {
+        document.getElementById('searchInput').value = '';
+        resetSelectById('routerFilter');
     });
     
     // Delete selected button
@@ -100,19 +110,24 @@ async function loadRoutersForSelect() {
 }
 
 async function loadInterfaces() {
+    const requestId = ++interfacesRequestId;
     const routerId = document.getElementById('routerFilter').value;
+    const search = document.getElementById('searchInput').value.trim();
     const params = new URLSearchParams({
         page: currentPage,
         per_page: perPage
     });
     if (routerId) params.append('router_id', routerId);
+    if (search) params.append('search', search);
     
     try {
         const data = await apiRequest(`${window.API_URLS.interfaces}?${params}`);
+        if (requestId !== interfacesRequestId) return;
         window._interfacesPage = data.interfaces || [];
         renderInterfacesTable(data.interfaces);
         renderPagination(data.total, data.pages, data.current_page);
     } catch (error) {
+        if (requestId !== interfacesRequestId) return;
         showToast('Error', error.message, 'error');
     }
 }
@@ -124,7 +139,9 @@ function renderInterfacesTable(interfaces) {
     const canBulkDelete = document.getElementById('selectAllInterfaces') !== null;
     const colspan = canBulkDelete ? 3 : 2;
     if (interfaces.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No interfaces found</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No interfaces found. Try another search or clear the filters.</td></tr>`;
+        updateDeleteButton();
+        updateSelectAllCheckbox();
         return;
     }
     tbody.innerHTML = interfaces.map(iface => {

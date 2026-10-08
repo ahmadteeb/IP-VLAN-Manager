@@ -430,7 +430,10 @@ def api_get_interfaces():
         query = query.filter_by(router_id=router_id)
     
     if search:
-        query = query.filter(Interface.name.like(f'%{search}%'))
+        query = query.filter(db.or_(
+            Interface.name.icontains(search.strip(), autoescape=True),
+            Interface.router.has(Router.name.icontains(search.strip(), autoescape=True))
+        ))
     
     query = query.order_by(Interface.name)
     

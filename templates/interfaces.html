@@ -10,9 +10,6 @@
             <i class="fas fa-plug"></i> Interfaces
         </h5>
         <div>
-            <select class="form-select form-select-sm d-inline-block" id="routerFilter" style="width: auto;">
-                <option value="">All Routers</option>
-            </select>
             {% if current_user.is_authenticated and (current_user.has_permission('interfaces.add') or current_user.has_permission('interfaces.delete') or current_user.has_permission('interfaces.export')) %}
             {% if current_user.has_permission('interfaces.export') %}
             <button class="btn btn-sm btn-outline-success" id="exportInterfacesBtn">
@@ -33,6 +30,21 @@
         </div>
     </div>
     <div class="card-body">
+        <div class="row g-3 align-items-end mb-3">
+            <div class="col-12 col-md-6">
+                <label for="searchInput" class="form-label">Search interfaces</label>
+                <input type="search" class="form-control" id="searchInput" placeholder="Interface or router name">
+            </div>
+            <div class="col-12 col-md-4">
+                <label for="routerFilter" class="form-label">Router</label>
+                <select class="form-select" id="routerFilter">
+                    <option value="">All Routers</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2">
+                <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear filters</button>
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover">
                 <thead>
