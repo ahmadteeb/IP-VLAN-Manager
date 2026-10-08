@@ -1,149 +1,76 @@
-import pandas as pd
-import os
-from sqlalchemy import create_engine, text
-import json
-from datetime import datetime
-import traceback
+import logging
+import ipaddress
+from collections import defaultdict
+from datetime import datetime, timezone
 
-REPORT_PATH = "Reports"
-DATABASE_URL = os.environ.get("DATABASE_URL")
+from sqlalchemy import text
 
-try:
-    # ----------------------------------------------------
-    # Load Network Elements
-    # ----------------------------------------------------
-    with open(f"{REPORT_PATH}/network-element.json", "r") as f:
-        network_element_data = pd.DataFrame(json.load(f))
+from service_utils import load_report, run_service
 
-    routers_df = network_element_data[
-        network_element_data["ip-address"].str.startswith("10.61.", na=False)
-    ]
 
-    # Remove Non IPRAN NEs
-    routers_df = routers_df[
-        ~routers_df["ip-address"].astype(str).str.startswith("10.61.67.", na=False)
-    ]
+def update_routers(engine, report_path="Reports"):
+    elements = load_report(report_path, "network-element.json", ("ip-address", "res-id", "name", "product-name"))
+    links = load_report(report_path, "ltp-v2.json", ("ne-id", "name", "is-physical", "is-sub-ltp", "mac"))
+    source = []
+    names, addresses, identifiers = set(), set(), set()
+    for row in elements:
+        address = row["ip-address"]
+        if not isinstance(address, str) or not address.startswith("10.61.") or address.startswith("10.61.67."):
+            continue
+        ipaddress.IPv4Address(address)
+        if not isinstance(row["res-id"], (str, int)) or isinstance(row["res-id"], bool) or row["res-id"] == "":
+            raise ValueError("Router res-id must be a nonempty string or integer")
+        if not all(isinstance(row[key], str) and row[key].strip() for key in ("name", "product-name")):
+            raise ValueError("Router name and product-name must be nonempty strings")
+        if row["name"] in names or address in addresses or row["res-id"] in identifiers:
+            raise ValueError(f"Duplicate router in inventory: {row['name']} / {address}")
+        names.add(row["name"])
+        addresses.add(address)
+        identifiers.add(row["res-id"])
+        source.append(row)
 
-    mysql_engine = create_engine(DATABASE_URL)
+    interfaces = defaultdict(set)
+    for row in links:
+        if not isinstance(row["is-physical"], bool) or not isinstance(row["is-sub-ltp"], bool):
+            raise ValueError("Interface physical/sub-interface flags must be booleans")
+        if row["is-physical"] is True or (row["is-sub-ltp"] is False and row["mac"] not in (None, "", "00-00-00-00-00-00")):
+            if not isinstance(row["name"], str) or not row["name"].strip():
+                raise ValueError("Interface name must be a nonempty string")
+            interfaces[row["ne-id"]].add(row["name"])
 
-    # ----------------------------------------------------
-    # Insert / Update Routers
-    # ----------------------------------------------------
-    insert_router = text("""
-        INSERT INTO routers (router_ip, name, router_type)
-        VALUES (:router_ip, :name, :router_type)
-        ON DUPLICATE KEY UPDATE router_ip = VALUES(router_ip)
-    """)
+    added = 0
+    with engine.begin() as conn:
+        routers = list(conn.execute(text("SELECT id, name, router_ip FROM routers")).mappings())
+        by_name = {row["name"]: row for row in routers}
+        by_ip = defaultdict(list)
+        for row in routers:
+            by_ip[row["router_ip"]].append(row)
+        existing = set(conn.execute(text("SELECT router_id, name FROM interfaces")).tuples())
+        matched = set()
+        for row in source:
+            candidates = by_ip[row["ip-address"]]
+            current = by_name.get(row["name"])
+            if len(candidates) > 1 or (current and candidates and current["id"] != candidates[0]["id"]):
+                raise ValueError(f"Conflicting database routers for {row['name']}")
+            current = current or (candidates[0] if candidates else None)
+            values = {"name": row["name"], "ip": row["ip-address"], "type": row["product-name"]}
+            if current:
+                router_id = current["id"]
+                if router_id in matched:
+                    raise ValueError("Multiple inventory routers match the same database router")
+                conn.execute(text("UPDATE routers SET name=:name, router_ip=:ip, router_type=:type WHERE id=:id"), {**values, "id": router_id})
+            else:
+                result = conn.execute(text("INSERT INTO routers (name, router_ip, router_type, created_at) VALUES (:name, :ip, :type, :created)"), {**values, "created": datetime.now(timezone.utc).replace(tzinfo=None)})
+                router_id = result.lastrowid
+            matched.add(router_id)
+            for name in sorted(interfaces[row["res-id"]]):
+                if (router_id, name) not in existing:
+                    conn.execute(text("INSERT INTO interfaces (router_id, name, created_at) VALUES (:id, :name, :created)"), {"id": router_id, "name": name, "created": datetime.now(timezone.utc).replace(tzinfo=None)})
+                    added += 1
+        # Inventory exports may be incomplete; removals require an authoritative deletion feed.
+        logging.info("Processed %s routers; added %s interfaces; preserved absent records", len(source), added)
+    return len(source), added
 
-    with mysql_engine.begin() as conn:
-        conn.exec_driver_sql(
-            "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
-        )
 
-        for _, row in routers_df.iterrows():
-            conn.execute(insert_router, {
-                "router_ip": row["ip-address"],
-                "name": row["name"],
-                "router_type": row["product-name"],
-            })
-
-    print("Routers updated successfully.")
-
-    # ----------------------------------------------------
-    # Load Interfaces
-    # ----------------------------------------------------
-    with open(f"{REPORT_PATH}/ltp-v2.json", "r") as f:
-        ltp_v2_data = pd.DataFrame(json.load(f))
-
-    interfaces_df = ltp_v2_data[
-        (ltp_v2_data["is-physical"]) |
-        (
-            (ltp_v2_data["is-sub-ltp"] == False) &
-            (ltp_v2_data["mac"] != "00-00-00-00-00-00")
-        )
-    ]
-
-    # ----------------------------------------------------
-    # Fetch Routers from DB
-    # ----------------------------------------------------
-    with mysql_engine.connect() as conn:
-        routers = [
-            dict(row._mapping)
-            for row in conn.execute(text("SELECT id, name, router_ip FROM routers"))
-        ]
-
-    insert_interface = text("""
-        INSERT IGNORE INTO interfaces (router_id, name)
-        VALUES (:router_id, :name)
-    """)
-
-    delete_interfaces = text("""
-        DELETE FROM interfaces WHERE router_id = :router_id
-    """)
-
-    delete_router = text("""
-        DELETE FROM routers WHERE id = :router_id
-    """)
-
-    # ----------------------------------------------------
-    # Insert Interfaces (ONE TRANSACTION PER ROUTER)
-    # ----------------------------------------------------
-    for router in routers:
-        print(f"Processing interfaces for router: {router['name']}")
-
-        try:
-            ne_id = network_element_data.loc[
-                network_element_data["ip-address"] == router["router_ip"],
-                "res-id"
-            ].iloc[0]
-
-            router_interfaces = interfaces_df[
-                interfaces_df["ne-id"] == ne_id
-            ].to_dict(orient="records")
-
-            with mysql_engine.begin() as conn:
-                conn.exec_driver_sql(
-                    "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
-                )
-
-                for interface in router_interfaces:
-                    conn.execute(insert_interface, {
-                        "router_id": router["id"],
-                        "name": interface["name"],
-                    })
-
-            print(f"Inserted interfaces for router: {router['name']}")
-
-        except IndexError:
-            # Router no longer exists in source → delete safely
-            with mysql_engine.begin() as conn:
-                conn.exec_driver_sql(
-                    "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
-                )
-
-                conn.execute(delete_interfaces, {
-                    "router_id": router["id"],
-                })
-
-                conn.execute(delete_router, {
-                    "router_id": router["id"],
-                })
-
-            print(f"Deleted router and interfaces: {router['name']}")
-
-    # ----------------------------------------------------
-    # Success Log
-    # ----------------------------------------------------
-    with open("success_update_routers.log", "a") as f:
-        f.write(f"Time: {datetime.now():%Y-%m-%d %H:%M:%S}\n")
-        f.write("Routers and interfaces updated successfully\n")
-        f.write("--------------------------------\n")
-
-except Exception as e:
-    with open("error_update_routers.log", "a") as f:
-        f.write(f"Time: {datetime.now():%Y-%m-%d %H:%M:%S}\n")
-        f.write(f"Error: {e}\n")
-        f.write(traceback.format_exc())
-        f.write("--------------------------------\n")
-
-    raise
+if __name__ == "__main__":
+    run_service("update_routers", update_routers)

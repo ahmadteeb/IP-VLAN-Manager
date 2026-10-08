@@ -188,6 +188,15 @@ python app.py
 
 The application includes background services for updating routers and sites:
 
+Reports are validated before database writes. Router imports refresh names,
+addresses, and types, add missing interfaces, and preserve records absent from
+the export. Each import uses a transaction so database failures roll back its
+changes. Site imports skip missing or ambiguous IP/interface/VLAN matches and
+log the reason; optional OM IPs may be null. VLAN matching respects the site's
+vendor and keeps a matching existing assignment when VLAN numbers are reused.
+Run summaries and failures appear in container output, with completion/error
+logs appended to the service working directory.
+
 **Update Routers Service**:
 ```bash
 cd fetching_services
