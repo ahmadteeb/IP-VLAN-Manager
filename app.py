@@ -6,6 +6,7 @@ from models.models import db, User, IP, VLAN, ActivityLog, Router, Interface, Si
 from config import Config
 from models.models import DuplicateIP
 from duplicate_ip_migration import remove_legacy_duplicate_ip_table
+from vlan_allocation import migrate_vendor_vlan_scope, used_vlan_ids as get_used_vlan_ids, vlan_conflict_ids
 from datetime import datetime
 import csv
 import math
@@ -804,7 +805,7 @@ def ips():
 
 @app.route('/duplicated-ip')
 @login_required
-@permission_required('ips.view')
+@permission_required('duplicated_ips.view')
 def duplicated_ip():
     query = DuplicateIP.query.join(DuplicateIP.router).join(DuplicateIP.ip).join(DuplicateIP.interface)
     search = request.args.get('search', '').strip()
@@ -1480,6 +1481,9 @@ def api_add_vendor():
     """Add a new vendor"""
     data = request.json
     name = data.get('name')
+    vlan_scope = data.get('vlan_scope', 'interface')
+    if vlan_scope not in ('interface', 'router'):
+        return jsonify({'error': 'VLAN scope must be interface or router'}), 400
     
     if not name:
         return jsonify({'error': 'Vendor name is required'}), 400
@@ -1487,13 +1491,27 @@ def api_add_vendor():
     if Vendor.query.filter_by(name=name).first():
         return jsonify({'error': 'Vendor with this name already exists'}), 400
     
-    vendor = Vendor(name=name)
+    vendor = Vendor(name=name, vlan_scope=vlan_scope)
     db.session.add(vendor)
     db.session.commit()
     
     log_activity('add_vendor', 'vendor', vendor.id, vendor.name)
     
     return jsonify({'message': 'Vendor added successfully', 'vendor': vendor.to_dict()}), 201
+
+@app.route('/api/vendors/<int:vendor_id>', methods=['PUT'])
+@login_required
+@permission_required('vendors.update')
+def api_update_vendor(vendor_id):
+    vendor = Vendor.query.get_or_404(vendor_id)
+    scope = (request.json or {}).get('vlan_scope')
+    if scope not in ('interface', 'router'):
+        return jsonify({'error': 'VLAN scope must be interface or router'}), 400
+    vendor.vlan_scope = scope
+    db.session.commit()
+    log_activity('update_vendor', 'vendor', vendor.id, f'{vendor.name}: VLAN allocation per {scope}')
+    return jsonify({'message': 'VLAN allocation scope updated', 'vendor': vendor.to_dict()})
+
 
 @app.route('/api/vendors/<int:vendor_id>', methods=['DELETE'])
 @login_required
@@ -1776,13 +1794,8 @@ def api_add_site():
                     return jsonify({'error': 'Interface does not belong to the selected router'}), 400
                 
                 # Get all VLAN IDs already used on this interface (for VLAN reuse check)
-                used_vlan_ids = []
-                for s in Site.query.filter_by(interface_id=interface_id).all():
-                    if s.service_vlan_id:
-                        used_vlan_ids.append(s.service_vlan_id)
-                    if s.om_vlan_id:
-                        used_vlan_ids.append(s.om_vlan_id)
-                app.logger.info(f'Found {len(used_vlan_ids)} VLANs already used on interface {interface_id}')
+                used_vlan_ids = get_used_vlan_ids(interface_id, vendor)
+                app.logger.info(f'Found {len(used_vlan_ids)} unavailable VLAN records using per-{vendor.vlan_scope} allocation')
             except Exception as e:
                 app.logger.error(f'Error fetching router/interface: router_id={router_id}, interface_id={interface_id}, error={str(e)}', exc_info=True)
                 return jsonify({'error': f'Router or Interface not found'}), 404
@@ -1918,7 +1931,7 @@ def api_add_site():
             if not service_vlan:
                 error_msg = f'No available service VLANs for technology {tech_name} and vendor {vendor.name}'
                 if interface_id:
-                    error_msg += ' on this interface'
+                    error_msg += f' on this {vendor.vlan_scope}'
                 app.logger.warning(f'No available service VLAN: {error_msg}')
                 db.session.rollback()
                 return jsonify({'error': error_msg}), 400
@@ -1940,7 +1953,7 @@ def api_add_site():
                 if interface_id and om_vlan.id in used_vlan_ids:
                     app.logger.warning(f'OM VLAN {om_vlan.vlan_id} is already used on interface {interface_id}')
                     db.session.rollback()
-                    return jsonify({'error': f'OM VLAN {om_vlan.vlan_id} is already used on this interface'}), 400
+                    return jsonify({'error': f'OM VLAN {om_vlan.vlan_id} is already used on this {vendor.vlan_scope}'}), 400
             
             # Use the same site_id for all technologies (site_id can be duplicated for different technologies)
             # But check if this site_id + technology combination already exists on this interface (if interface is specified)
@@ -1982,9 +1995,9 @@ def api_add_site():
                 assigned_ips.append(om_ip.id)
             
             # Add VLANs to used list for subsequent technologies on same interface
-            used_vlan_ids.append(service_vlan.id)
+            used_vlan_ids.extend(vlan_conflict_ids([service_vlan.id]))
             if om_vlan:
-                used_vlan_ids.append(om_vlan.id)
+                used_vlan_ids.extend(vlan_conflict_ids([om_vlan.id]))
         
         try:
             db.session.commit()
@@ -2200,18 +2213,7 @@ def api_bulk_import_sites():
                     continue
                 
                 # Get used VLAN IDs if interface is specified (from existing sites)
-                existing_used_vlan_ids = []
-                if interface_id:
-                    for s in Site.query.filter_by(interface_id=interface_id).all():
-                        if s.service_vlan_id:
-                            existing_used_vlan_ids.append(s.service_vlan_id)
-                        if s.om_vlan_id:
-                            existing_used_vlan_ids.append(s.om_vlan_id)
-                
-                # Get VLANs already used in this import for this interface
-                import_used_vlan_ids = all_used_vlan_ids.get(interface_id, set()) if interface_id else set()
-                # Combine existing and import-used VLANs
-                row_used_vlan_ids = set(existing_used_vlan_ids) | import_used_vlan_ids
+                row_used_vlan_ids = set(get_used_vlan_ids(interface_id, vendor, pending=all_used_vlan_ids))
                 
                 # Track IPs used in this row to avoid duplicates within the row
                 row_assigned_ips = []
@@ -2310,7 +2312,7 @@ def api_bulk_import_sites():
                             break
                         
                         if interface_id and om_vlan.id in row_used_vlan_ids:
-                            errors.append(f'Row {row_num}: OM VLAN {om_vlan.vlan_id} is already used on this interface')
+                            errors.append(f'Row {row_num}: OM VLAN {om_vlan.vlan_id} is already used on this {vendor.vlan_scope}')
                             break
                     
                     # Check for existing site
@@ -2344,9 +2346,9 @@ def api_bulk_import_sites():
                     row_assigned_ips.append(service_ip.id)
                     if om_ip:
                         row_assigned_ips.append(om_ip.id)
-                    row_used_vlan_ids.add(service_vlan.id)
+                    row_used_vlan_ids.update(vlan_conflict_ids([service_vlan.id]))
                     if om_vlan:
-                        row_used_vlan_ids.add(om_vlan.id)
+                        row_used_vlan_ids.update(vlan_conflict_ids([om_vlan.id]))
                 
                 # Only add to validated_rows if all technologies passed validation
                 if len(row_sites_data) == len(tech_names):
@@ -2356,7 +2358,8 @@ def api_bulk_import_sites():
                     if interface_id:
                         if interface_id not in all_used_vlan_ids:
                             all_used_vlan_ids[interface_id] = set()
-                        all_used_vlan_ids[interface_id].update(row_used_vlan_ids)
+                        all_used_vlan_ids[interface_id].update(
+                            vlan.id for item in row_sites_data for vlan in (item['service_vlan'], item['om_vlan']) if vlan)
             
             except Exception as e:
                 app.logger.error(f'Error validating row {row_num}: {str(e)}', exc_info=True)
@@ -2550,6 +2553,7 @@ def api_transfer_sites_check():
     
     if not interface_id:
         return jsonify({'error': 'Interface ID is required'}), 400
+    Interface.query.get_or_404(interface_id)
     
     # Get all sites to transfer
     sites = Site.query.filter(Site.id.in_(site_ids)).all()
@@ -2558,15 +2562,10 @@ def api_transfer_sites_check():
         return jsonify({'error': 'One or more site IDs are invalid'}), 400
     
     # Get all VLAN IDs already used on the new interface (both service and OM)
-    used_vlan_ids = []
-    for s in Site.query.filter_by(interface_id=interface_id).all():
-        if s.service_vlan_id:
-            used_vlan_ids.append(s.service_vlan_id)
-        if s.om_vlan_id:
-            used_vlan_ids.append(s.om_vlan_id)
-    
+    pending_vlans = {}
     conflicts = []
     for site in sites:
+        used_vlan_ids = get_used_vlan_ids(interface_id, site.vendor_obj, site_ids, pending_vlans)
         # Check for conflicts with service VLAN or OM VLAN
         has_conflict = False
         conflict_vlans = []
@@ -2588,6 +2587,8 @@ def api_transfer_sites_check():
                 'technology': site.technology_type if site.technology_type else None,
                 'vendor': site.vendor_obj.name if site.vendor_obj else None
             })
+        pending_vlans.setdefault(int(interface_id), set()).update(
+            value for value in (site.service_vlan_id, site.om_vlan_id) if value)
     
     return jsonify({
         'has_conflicts': len(conflicts) > 0,
@@ -2627,17 +2628,13 @@ def api_transfer_sites():
         return jsonify({'error': 'One or more site IDs are invalid'}), 400
     
     # Get all VLAN IDs already used on the new interface
-    used_vlan_ids = []
-    for s in Site.query.filter_by(interface_id=interface_id).all():
-        if s.service_vlan_id:
-            used_vlan_ids.append(s.service_vlan_id)
-        if s.om_vlan_id:
-            used_vlan_ids.append(s.om_vlan_id)
+    pending_vlans = {}
     
     transferred_sites = []
     total_sites = len(sites)
     
     for i, site in enumerate(sites, 1):
+        used_vlan_ids = get_used_vlan_ids(interface_id, site.vendor_obj, site_ids, pending_vlans)
         # Emit progress event
         try:
             announcer.announce(format_sse(json.dumps({
@@ -2734,6 +2731,8 @@ def api_transfer_sites():
         
         # Update router and interface
         site.interface_id = interface_id
+        pending_vlans.setdefault(int(interface_id), set()).update(
+            value for value in (site.service_vlan_id, site.om_vlan_id) if value)
         
         # Log activity (include old router/interface in resource_value)
         transfer_info = f"{site.site_name} (from {old_router}/{old_interface} to {router.name}/{interface.name})"
@@ -2819,16 +2818,7 @@ def api_get_available_vlans():
         # Get VLANs currently used on this interface (excluding the site itself if passed)
         exclude_site_id = request.args.get('exclude_site_id', type=int)
         
-        used_vlan_ids = []
-        site_query = Site.query.filter_by(interface_id=interface_id)
-        if exclude_site_id:
-            site_query = site_query.filter(Site.id != exclude_site_id)
-            
-        for s in site_query.all():
-            if s.service_vlan_id:
-                used_vlan_ids.append(s.service_vlan_id)
-            if s.om_vlan_id:
-                used_vlan_ids.append(s.om_vlan_id)
+        used_vlan_ids = get_used_vlan_ids(interface_id, vendor, [exclude_site_id] if exclude_site_id else [])
                 
         service_vlan_query = VLAN.query.filter(
             ((VLAN.vendor_id == vendor.id) | (VLAN.vendor == vendor.name)),
@@ -2898,10 +2888,7 @@ def api_edit_site(site_id):
         # Handle VLAN changes
         if vlan_mode != 'keep' and site.interface_id:
             # Gather used vlans on interface
-            used_vlan_ids = []
-            for s in Site.query.filter(Site.interface_id == site.interface_id, Site.id != site.id).all():
-                if s.service_vlan_id: used_vlan_ids.append(s.service_vlan_id)
-                if s.om_vlan_id: used_vlan_ids.append(s.om_vlan_id)
+            used_vlan_ids = get_used_vlan_ids(site.interface_id, site.vendor_obj, [site.id])
                 
             vendor_name = site.vendor_obj.name if site.vendor_obj else None
             
@@ -3519,6 +3506,9 @@ def init_permissions():
         {'name': 'Delete VLANs', 'code': 'vlans.delete', 'description': 'Delete VLANs', 'category': 'vlans', 'required_permissions': ['vlans.view']},
         {'name': 'Export VLANs', 'code': 'vlans.export', 'description': 'Export VLANs to Excel', 'category': 'vlans', 'required_permissions': ['vlans.view']},
         
+        # Duplicated IP permissions
+        {'name': 'View Duplicated IPs', 'code': 'duplicated_ips.view', 'description': 'View duplicated IP addresses, technologies, routers and interfaces', 'category': 'duplicated_ips', 'required_permissions': []},
+
         # IP permissions
         {'name': 'View IPs', 'code': 'ips.view', 'description': 'View IP address list and details', 'category': 'ips', 'required_permissions': []},
         {'name': 'Add IPs', 'code': 'ips.add', 'description': 'Add new IP addresses', 'category': 'ips', 'required_permissions': ['technologies.view', 'vendors.view', 'ips.view']},
@@ -3538,6 +3528,7 @@ def init_permissions():
         # Vendor permissions
         {'name': 'View Vendors', 'code': 'vendors.view', 'description': 'View vendor list and details', 'category': 'vendors', 'required_permissions': []},
         {'name': 'Add Vendors', 'code': 'vendors.add', 'description': 'Add new vendors', 'category': 'vendors', 'required_permissions': ['vendors.view']},
+        {'name': 'Update Vendor Settings', 'code': 'vendors.update', 'description': 'Change vendor VLAN allocation between per interface and per router', 'category': 'vendors', 'required_permissions': ['vendors.view']},
         {'name': 'Delete Vendors', 'code': 'vendors.delete', 'description': 'Delete vendors', 'category': 'vendors', 'required_permissions': ['vendors.view']},
         {'name': 'Export Vendors', 'code': 'vendors.export', 'description': 'Export vendors to Excel', 'category': 'vendors', 'required_permissions': ['vendors.view']},
         
@@ -3615,6 +3606,8 @@ def init_default_roles():
         db.session.commit()
         app.logger.info('Admin role created')
     else:
+        admin_role.permissions = Permission.query.all()
+        db.session.commit()
         # Ensure Admin role is always marked as system
         if not admin_role.is_system:
             admin_role.is_system = True
@@ -3629,6 +3622,7 @@ def init_db():
         app.logger.info('Creating database tables if they do not exist...')
         remove_legacy_duplicate_ip_table(db.engine)
         db.create_all()
+        migrate_vendor_vlan_scope(db.engine)
         # The old table contains only regenerable scan results.
         with db.engine.begin() as conn:
             conn.exec_driver_sql('DROP TABLE IF EXISTS duplicate_ip_scans')

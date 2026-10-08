@@ -129,6 +129,7 @@ class Vendor(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    vlan_scope = db.Column(db.String(16), nullable=False, default='interface', server_default='interface')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -141,6 +142,7 @@ class Vendor(db.Model):
         return {
             'id': self.id,
             'name': self.name,
+            'vlan_scope': self.vlan_scope,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
     
@@ -178,7 +180,7 @@ class User(UserMixin, db.Model):
                             'vlans.add', 'vlans.delete',
                             'ips.add', 'ips.delete',
                             'sites.add', 'sites.update', 'sites.release',
-                            'vendors.add', 'vendors.delete',
+                            'vendors.add', 'vendors.update', 'vendors.delete',
                             'technologies.add', 'technologies.delete',
                             'users.manage', 'roles.manage']
         has_write = any(self.role_obj.has_permission(p) for p in write_permissions)

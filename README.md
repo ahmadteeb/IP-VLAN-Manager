@@ -184,17 +184,34 @@ The application uses Waitress WSGI server for production. Set `DEBUG = False` in
 python app.py
 ```
 
+### Vendor VLAN allocation
+
+On the Vendors page, select **Per interface** or **Per router** for each vendor.
+In Role Management, grant **Update Vendor Settings** (`vendors.update`) to
+allow changes to existing vendors; it requires **View Vendors**. **Add Vendors**
+still controls creation, including the initial allocation choice. The Admin
+role automatically receives the new permission on startup. Per interface allows a VLAN number to be reused on another
+interface; per router requires a VLAN number to be unused across all interfaces
+of the destination router. Other routers can still reuse it. Service and OM
+VLANs are both checked, including records sharing the same VLAN number.
+The setting applies to site creation, Excel import, VLAN availability, editing,
+and transfers. Existing sites retain their allocations when the setting changes.
+Startup adds the setting to existing databases with **Per interface** as the
+default. Rebuild/restart the app to apply the schema change.
+
 ### Running Services
 
 The **Duplicated IP** page (`/duplicated-ip`) shows the latest successful
-inventory scan to users with `ips.view` permission. An IPv4 address is flagged
+inventory scan to users with **View Duplicated IPs** (`duplicated_ips.view`)
+permission, available in Role Management under Duplicated IPs. This is separate
+from View IPs; non-admin roles must be granted it explicitly. An IPv4 address is flagged
 when it appears on two or more distinct router/interface pairs and matches a
 `gateway` in the IP table with a nonempty technology (`ips.type`). Technology
 comes from that database record; no VPN field is needed in the report. IPs
 absent from the IP table are excluded. Results store router IDs; the page resolves current router
 names and IPs from the routers table and displays one occurrence per row.
 Inventory routers absent from the routers table are logged and skipped.
-Router and site updates complete before the duplicate check runs. Previous
+Router and site updates complete before the duplicate check runs.
 The `duplicate_IPs` table stores one row per duplicate router/interface
 occurrence, with columns `id`, `ip_id`, `router_id`, `interface_id`, and
 `checked_at`. IP address and technology, router details, and interface names
@@ -220,10 +237,11 @@ The application includes background services for updating routers and sites:
 Reports are validated before database writes. Router imports refresh names,
 addresses, and types and add missing routers/interfaces. Database routers with
 neither a matching name nor address in the complete network-element export
-are deleted, along with their interfaces, related sites, and duplicate-IP rows.
-IPs released by deleted sites are marked free only if no remaining site uses
-them. Treat the export as authoritative: a nonempty but incomplete report can
-delete records. Empty or malformed reports fail before deletion.
+are deleted, along with their interfaces and duplicate-IP rows. Related sites
+are preserved with `interface_id=NULL`, which also leaves their router
+unassigned. Their IP/VLAN assignments and IP allocation status are retained.
+Treat the export as authoritative: a nonempty but incomplete report can remove
+valid routers and detach sites. Empty or malformed reports fail before deletion.
 Conflicting router identities are logged with database IDs and
 skipped without merging or deleting records; duplicate scans also skip router
 IPs matching multiple database records. Interface skips are summarized by

@@ -9,6 +9,23 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function setupEventListeners() {
+    document.getElementById('vendorTableBody').addEventListener('change', async function(event) {
+        if (!event.target.matches('.vendor-vlan-scope')) return;
+        const select = event.target;
+        select.disabled = true;
+        try {
+            await apiRequest(window.API_URLS.updateVendor(select.dataset.vendorId), {
+                method: 'PUT', body: JSON.stringify({vlan_scope: select.value})
+            });
+            showToast('Success', 'VLAN allocation updated', 'success');
+            await loadVendors();
+        } catch (error) {
+            select.value = select.dataset.previous;
+            showToast('Error', error.message, 'error');
+        } finally {
+            select.disabled = false;
+        }
+    });
     const addVendorBtn = document.getElementById('addVendorBtn');
     if (addVendorBtn) {
         addVendorBtn.addEventListener('click', function() {
@@ -75,7 +92,8 @@ function renderVendorsTable(vendors) {
     // Check if user has delete or export permission (not add permission)
     const hasDeleteOrExport = document.getElementById('deleteVendorsBtn') !== null || document.getElementById('exportVendorsBtn') !== null;
     const hasCheckbox = document.getElementById('selectAllVendors') !== null;
-    const colspan = hasCheckbox ? 4 : 3;
+    const colspan = hasCheckbox ? 5 : 4;
+    const canUpdate = document.getElementById('vendorsCard').dataset.canUpdate === 'true';
     
     if (vendors.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">No vendors found</td></tr>`;
@@ -90,6 +108,10 @@ function renderVendorsTable(vendors) {
             ${checkbox}
             <td>${vendor.id}</td>
             <td><strong>${vendor.name}</strong></td>
+            <td>${canUpdate ? `<select class="form-select form-select-sm vendor-vlan-scope" aria-label="VLAN allocation for vendor ${vendor.id}" data-vendor-id="${vendor.id}" data-previous="${vendor.vlan_scope}">
+                <option value="interface" ${vendor.vlan_scope === 'interface' ? 'selected' : ''}>Per interface</option>
+                <option value="router" ${vendor.vlan_scope === 'router' ? 'selected' : ''}>Per router</option>
+            </select>` : (vendor.vlan_scope === 'router' ? 'Per router' : 'Per interface')}</td>
             <td>${vendor.created_at ? new Date(vendor.created_at).toLocaleString() : 'N/A'}</td>
         </tr>
         `;
@@ -110,10 +132,11 @@ function exportSelectedVendors() {
         showToast('Error', 'Selected vendors are not in the current view. Change page or reload.', 'error');
         return;
     }
-    const headers = ['ID', 'Vendor Name', 'Created At'];
+    const headers = ['ID', 'Vendor Name', 'VLAN allocation', 'Created At'];
     const rows = list.map(v => [
         v.id,
         v.name,
+        v.vlan_scope,
         v.created_at || ''
     ]);
     exportToCsv(`vendors_export_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}`, headers, rows);
@@ -240,7 +263,8 @@ async function addVendor() {
         await apiRequest(window.API_URLS.addVendor, {
             method: 'POST',
             body: JSON.stringify({
-                name: name
+                name: name,
+                vlan_scope: document.getElementById('vendorVlanScope').value
             })
         });
         

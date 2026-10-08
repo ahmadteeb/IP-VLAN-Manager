@@ -4,7 +4,7 @@
 {% block page_title %}Vendor Management{% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card" id="vendorsCard" data-can-update="{{ 'true' if current_user.has_permission('vendors.update') else 'false' }}">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">
             <i class="fas fa-building"></i> Vendors
@@ -37,6 +37,7 @@
                         {% endif %}
                         <th>ID</th>
                         <th>Vendor Name</th>
+                        <th>VLAN allocation</th>
                         <th>Created At</th>
                     </tr>
                 </thead>
@@ -65,6 +66,14 @@
                     <div class="mb-3">
                         <label class="form-label">Vendor Name *</label>
                         <input type="text" class="form-control" id="vendorName" required placeholder="e.g., Huawei, Ericsson, Nokia">
+                    </div>
+                    <div class="mb-3">
+                        <label for="vendorVlanScope" class="form-label">VLAN allocation</label>
+                        <select id="vendorVlanScope" class="form-select">
+                            <option value="interface">Per interface</option>
+                            <option value="router">Per router</option>
+                        </select>
+                        <div class="form-text">Per router prevents VLAN reuse across all interfaces on the same router. Changing this setting applies to future allocations; existing sites keep their VLANs.</div>
                     </div>
                 </form>
             </div>

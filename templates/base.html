@@ -61,7 +61,8 @@
                     current_user.has_permission('routers.view') or
                     current_user.has_permission('interfaces.view') or
                     current_user.has_permission('vlans.view') or
-                    current_user.has_permission('ips.view')
+                    current_user.has_permission('ips.view') or
+                    current_user.has_permission('duplicated_ips.view')
                 ) %}
                 {% if has_network %}
                 <li class="menu-divider">
@@ -113,6 +114,8 @@
                         <span class="menu-indicator"></span>
                     </a>
                 </li>
+                {% endif %}
+                {% if current_user.is_authenticated and current_user.has_permission('duplicated_ips.view') %}
                 <li class="menu-item">
                     <a href="{{ url_for('duplicated_ip') }}" class="menu-link {% if request.endpoint == 'duplicated_ip' %}active{% endif %}" title="Duplicated IP">
                         <span class="menu-icon"><i class="fas fa-copy" aria-hidden="true"></i></span>
@@ -348,6 +351,7 @@
             // Vendors
             vendors: '{{ url_for("api_get_vendors") }}',
             addVendor: '{{ url_for("api_add_vendor") }}',
+            updateVendor: function(id) { return '{{ url_for("api_update_vendor", vendor_id=0) }}'.replace('0', id); },
             deleteVendor: function(id) { return '{{ url_for("api_delete_vendor", vendor_id=0) }}'.replace('0', id); },
             
             // Users

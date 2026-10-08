@@ -90,17 +90,13 @@ def update_routers(engine, report_path="Reports"):
                    and row['name'] not in inventory_names and row['router_ip'] not in inventory_ips]
         for router in removed:
             values = {'id': router['id']}
-            affected_sites = list(conn.execute(text('SELECT service_ip_id, om_ip_id FROM sites WHERE interface_id IN '
-                                                    '(SELECT id FROM interfaces WHERE router_id=:id)'), values).mappings())
-            conn.execute(text('DELETE FROM sites WHERE interface_id IN (SELECT id FROM interfaces WHERE router_id=:id)'), values)
-            for ip_id in {site[key] for site in affected_sites for key in ('service_ip_id', 'om_ip_id') if site[key] is not None}:
-                conn.execute(text("UPDATE ips SET status='FREE', assigned_date=NULL WHERE id=:ip_id "
-                                  'AND NOT EXISTS (SELECT 1 FROM sites WHERE service_ip_id=:ip_id OR om_ip_id=:ip_id)'), {'ip_id': ip_id})
+            detached = conn.execute(text('UPDATE sites SET interface_id=NULL WHERE interface_id IN '
+                                         '(SELECT id FROM interfaces WHERE router_id=:id)'), values).rowcount
             conn.execute(text('DELETE FROM `duplicate_IPs` WHERE router_id=:id OR interface_id IN '
                               '(SELECT id FROM interfaces WHERE router_id=:id)'), values)
             conn.execute(text('DELETE FROM interfaces WHERE router_id=:id'), values)
             conn.execute(text('DELETE FROM routers WHERE id=:id'), values)
-            logging.info('Removed router ID %s (%s), its interfaces and %s sites', router['id'], router['name'], len(affected_sites))
+            logging.info('Removed router ID %s (%s) and its interfaces; kept %s sites with no router/interface assignment', router['id'], router['name'], detached)
         logging.info("Updated %s routers; skipped %s conflicts; added %s interfaces; removed %s routers", len(matched), skipped_routers, added, len(removed))
     return len(matched), added
 

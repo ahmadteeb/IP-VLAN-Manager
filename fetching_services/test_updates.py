@@ -91,17 +91,20 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(routers[1]['router_ip'], '10.61.2.1')
         self.assertEqual(routers[2]['name'], 'healthy')
 
-    def test_removal_deletes_related_records_and_releases_ip(self):
+    def test_router_removal_preserves_sites_and_resource_assignments(self):
         with self.engine.begin() as conn:
             conn.execute(text("INSERT INTO interfaces VALUES (20, 2, 'old-port', NULL)"))
             conn.execute(text('UPDATE sites SET interface_id=20 WHERE id=1'))
+            conn.execute(text('UPDATE sites SET service_vlan_id=1, om_vlan_id=2 WHERE id=1'))
             conn.execute(text('INSERT INTO duplicate_IPs VALUES (1, 2, 20)'))
+        previous = dict(self.rows('sites')[0])
         update_routers(self.engine, self.directory.name)
-        self.assertEqual([row['id'] for row in self.rows('sites')], [2])
+        self.assertEqual([row['id'] for row in self.rows('sites')], [1, 2])
+        self.assertEqual(dict(self.rows('sites')[0]), {**previous, 'interface_id': None})
         self.assertEqual(self.rows('duplicate_IPs'), [])
         self.assertNotIn(20, [row['id'] for row in self.rows('interfaces')])
-        self.assertEqual(self.rows('ips')[0]['status'], 'FREE')
-        self.assertIsNone(self.rows('ips')[0]['assigned_date'])
+        self.assertEqual(self.rows('ips')[0]['status'], 'ASSIGNED')
+        self.assertEqual(self.rows('ips')[0]['assigned_date'], '2026-10-08')
 
     def test_invalid_inventory_does_not_delete_existing_records(self):
         self.elements = []
@@ -110,7 +113,7 @@ class UpdateTest(unittest.TestCase):
             update_routers(self.engine, self.directory.name)
         self.assertEqual(len(self.rows('routers')), 2)
 
-    def test_router_delete_failure_rolls_back_related_deletions(self):
+    def test_router_delete_failure_rolls_back_site_detachment(self):
         with self.engine.begin() as conn:
             conn.execute(text("INSERT INTO interfaces VALUES (20, 2, 'old-port', NULL)"))
             conn.execute(text('UPDATE sites SET interface_id=20 WHERE id=1'))
@@ -121,6 +124,7 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(len(self.rows('sites')), 2)
         self.assertEqual(self.rows('ips')[0]['status'], 'ASSIGNED')
         self.assertEqual(self.rows('interfaces')[0]['id'], 20)
+        self.assertEqual(self.rows('sites')[0]['interface_id'], 20)
 
     def test_router_removal_keeps_shared_ip_assigned(self):
         with self.engine.begin() as conn:
