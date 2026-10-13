@@ -99,6 +99,8 @@ function setupEventListeners() {
     if (exportBtn) {
         exportBtn.addEventListener('click', exportSelectedSites);
     }
+    const exportIdsForm = document.getElementById('exportSiteIdsForm');
+    if (exportIdsForm) exportIdsForm.addEventListener('submit', exportSitesByIds);
 
     const generateConfigBtn = document.getElementById('generateConfigBtn');
     if (generateConfigBtn) {
@@ -179,6 +181,7 @@ function setupEventListeners() {
     document.getElementById('searchInput').addEventListener('input', debounce(function () {
         currentPage = 1;
         selectedSiteIds.clear();
+        updateTransferButton();
         loadSites();
     }, 500));
 
@@ -333,6 +336,56 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+async function exportSitesByIds(event) {
+    event.preventDefault();
+    const input = document.getElementById('exportSiteIdsInput');
+    const errorBox = document.getElementById('exportSiteIdsError');
+    const button = document.getElementById('exportSiteIdsSubmit');
+    const siteIds = [...new Set(input.value.split(/[\s,;]+/).filter(Boolean))];
+    errorBox.textContent = '';
+    input.removeAttribute('aria-invalid');
+    if (!siteIds.length || siteIds.length > 1000 || siteIds.some(id => id.length > 100)) {
+        errorBox.textContent = 'Enter 1–1,000 site IDs, each up to 100 characters.';
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+        return;
+    }
+    button.disabled = true;
+    button.textContent = 'Exporting…';
+    try {
+        const response = await fetch(window.API_URLS.exportSites, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ site_ids: siteIds })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            const missing = data.missing_site_ids ? ` Missing IDs: ${data.missing_site_ids.join(', ')}` : '';
+            throw new Error((data.error || 'Export failed') + missing);
+        }
+        const blob = await response.blob();
+        if (!response.headers.get('Content-Type')?.includes('text/csv')) {
+            throw new Error('Export failed. Your session may have expired; sign in and try again.');
+        }
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'sites_export.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+        bootstrap.Modal.getInstance(document.getElementById('exportSiteIdsModal')).hide();
+    } catch (error) {
+        errorBox.textContent = error.message;
+        input.setAttribute('aria-invalid', 'true');
+        input.focus();
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Download CSV';
+    }
 }
 
 function exportSelectedSites() {
@@ -735,6 +788,7 @@ async function transferSites() {
         showToast('Success', `Successfully transferred ${data.count} site(s)`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('transferSitesModal')).hide();
         selectedSiteIds.clear();
+        updateTransferButton();
         loadSites();
     } catch (error) {
         showToast('Error', error.message, 'error');
@@ -770,6 +824,7 @@ async function releaseSelectedSites(siteIds) {
 
         showToast('Success', `Successfully released ${data.count} site(s)`, 'success');
         selectedSiteIds.clear();
+        updateTransferButton();
         loadSites();
     } catch (error) {
         showToast('Error', error.message, 'error');

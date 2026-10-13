@@ -3376,12 +3376,27 @@ def activity_logs():
     return render_template('activity_logs.html')
 
 # CSV Export/Import Routes
-@app.route('/api/export/sites', methods=['GET'])
+@app.route('/api/export/sites', methods=['GET', 'POST'])
 @login_required
 @permission_required('sites.export')
 def api_export_sites():
     """Export sites to CSV"""
-    sites = Site.query.all()
+    if request.method == 'POST':
+        data = request.get_json(silent=True)
+        site_ids = data.get('site_ids') if isinstance(data, dict) else None
+        if (not isinstance(site_ids, list) or not site_ids or len(site_ids) > 1000
+                or any(not isinstance(value, str) or not value.strip() or len(value.strip()) > 100
+                       for value in site_ids)):
+            return jsonify({'error': 'Provide 1–1,000 site IDs, each up to 100 characters.'}), 400
+        site_ids = list(dict.fromkeys(value.strip() for value in site_ids))
+        sites = Site.query.filter(Site.site_id.in_(site_ids)).order_by(Site.site_id, Site.id).all()
+        found = {site.site_id for site in sites}
+        missing = [value for value in site_ids if value not in found]
+        if missing:
+            return jsonify({'error': 'Some site IDs were not found. Correct the list and try again.',
+                            'missing_site_ids': missing}), 400
+    else:
+        sites = Site.query.all()
     
     output = io.StringIO()
     writer = csv.writer(output)
