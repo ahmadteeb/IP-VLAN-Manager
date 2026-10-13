@@ -7,10 +7,21 @@ from flask import Flask
 from sqlalchemy import create_engine, text
 
 from models.models import db, Vendor, Router, Interface, VLAN, Site, Role, Permission, User
-from vlan_allocation import migrate_vendor_vlan_scope, used_vlan_ids
+from migrations.vendor_migration import migrate_vendor_vlan_scope
+from vlan_allocation import used_vlan_ids
 
 
 class VLANAllocationTest(unittest.TestCase):
+    def test_vlan_counts_use_actual_site_assignments(self):
+        assigned = VLAN.query.filter(db.or_(VLAN.sites_service.any(), VLAN.sites_om.any()))
+        self.assertEqual(assigned.count(), 1)
+        self.assertNotIn('status', VLAN.__table__.columns)
+        self.assertNotIn('status', self.vlans[0].to_dict())
+        db.session.add(Site(site_id='second', site_name='Second', service_vlan_id=self.vlans[0].id,
+                            om_vlan_id=self.vlans[1].id))
+        db.session.commit()
+        self.assertEqual(assigned.count(), 2)
+
     def setUp(self):
         app = Flask(__name__)
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://'

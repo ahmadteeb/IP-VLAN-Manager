@@ -280,7 +280,6 @@ class IP(db.Model):
     gateway = db.Column(db.String(45), unique=True, nullable=False, index=True)
     subnet_mask = db.Column(db.String(45))
     type = db.Column(db.String(100), nullable=False, index=True)
-    vendor = db.Column(db.String(100), nullable=True, index=True)  # Keep for backward compatibility
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'), nullable=True, index=True)
     status = db.Column(db.Enum(StatusType), nullable=False, default=StatusType.FREE, index=True)
     assigned_date = db.Column(db.DateTime)
@@ -311,7 +310,7 @@ class IP(db.Model):
             'gateway': self.gateway,
             'subnet_mask': self.subnet_mask,
             'type': self.type,
-            'vendor': self.vendor_obj.name if self.vendor_obj else self.vendor,
+            'vendor': self.vendor_obj.name if self.vendor_obj else None,
             'vendor_id': self.vendor_id,
             'status': self.status.value if self.status else None,
             'assigned_date': self.assigned_date.isoformat() if self.assigned_date else None,
@@ -335,7 +334,6 @@ class VLAN(db.Model):
     type = db.Column(db.String(100), nullable=False, index=True)
     vendor = db.Column(db.String(100), nullable=True, index=True)  # Keep for backward compatibility
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'), nullable=True, index=True)
-    status = db.Column(db.Enum(StatusType), nullable=False, default=StatusType.FREE, index=True)
     assigned_date = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -366,7 +364,6 @@ class VLAN(db.Model):
             'type': self.type,
             'vendor': self.vendor_obj.name if self.vendor_obj else self.vendor,
             'vendor_id': self.vendor_id,
-            'status': self.status.value if self.status else None,
             'assigned_date': self.assigned_date.isoformat() if self.assigned_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'pair_id': self.pair_id,
@@ -387,14 +384,6 @@ class Site(db.Model):
     site_id = db.Column(db.String(100), nullable=False, index=True)  # Removed unique constraint - same site_id can be used for different technologies
     site_name = db.Column(db.String(200), nullable=False, index=True)
     technology_type = db.Column(db.String(100), nullable=True, index=True)
-    # NOTE: The legacy JSON "technologies" column has been removed in favor of single "technology_type"
-    # to simplify the data model. If the physical DB column still exists, create a migration to drop it.
-    # Example Alembic migration snippet (for reference only, not executed here):
-    # op.drop_column('sites', 'technologies')
-
-    # The legacy string "vendor" column has been removed; use vendor_id / Vendor relationship instead.
-    # If the physical DB column still exists, create a migration to drop it:
-    # op.drop_column('sites', 'vendor')
     vendor_id = db.Column(db.Integer, db.ForeignKey('vendors.id'), nullable=True, index=True)
     
     # Pair fields for service and OM

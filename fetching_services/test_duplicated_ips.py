@@ -7,10 +7,20 @@ from sqlalchemy import create_engine, text
 
 from check_duplicated_ips import check_duplicated_ips, find_duplicates
 from service_utils import inventory_ipv4
-from duplicate_ip_migration import remove_legacy_duplicate_ip_table
+from migrations.duplicate_ip_migration import remove_legacy_duplicate_ip_table, remove_legacy_duplicate_ip_scans
 
 
 class DuplicateIPTest(unittest.TestCase):
+    def test_legacy_scan_table_removal_can_repeat(self):
+        engine = create_engine('sqlite://')
+        self.addCleanup(engine.dispose)
+        with engine.begin() as conn:
+            conn.execute(text('CREATE TABLE duplicate_ip_scans (id INTEGER)'))
+        remove_legacy_duplicate_ip_scans(engine)
+        remove_legacy_duplicate_ip_scans(engine)
+        with engine.connect() as conn:
+            self.assertIsNone(conn.execute(text("SELECT name FROM sqlite_master WHERE name = 'duplicate_ip_scans'")).first())
+
     def test_legacy_cache_migration_and_new_schema_preservation(self):
         engine = create_engine('sqlite://')
         self.addCleanup(engine.dispose)

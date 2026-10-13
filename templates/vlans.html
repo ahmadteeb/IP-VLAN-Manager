@@ -54,12 +54,6 @@
                     {% for vendor in filter_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
-                <label for="statusFilter" class="form-label">Status</label>
-                <select id="statusFilter" class="form-select">
-                    <option value="">All statuses</option><option value="FREE">Free</option><option value="ASSIGNED">Assigned</option>
-                </select>
-            </div>
             <div class="col-md-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">Search</button>
                 <button type="button" id="clearFilters" class="btn btn-outline-secondary">Clear</button>

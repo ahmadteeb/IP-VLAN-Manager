@@ -63,12 +63,12 @@ function setupEventListeners() {
         event.preventDefault();
         applyFilters();
     });
-    ['statusFilter', 'technologyFilter', 'vendorFilter'].forEach(id => {
+    ['technologyFilter', 'vendorFilter'].forEach(id => {
         document.getElementById(id).addEventListener('change', applyFilters);
     });
     document.getElementById('clearFilters').addEventListener('click', function() {
         document.getElementById('searchInput').value = '';
-        ['statusFilter', 'technologyFilter', 'vendorFilter'].forEach(resetSelectById);
+        ['technologyFilter', 'vendorFilter'].forEach(resetSelectById);
         applyFilters();
     });
     
@@ -121,13 +121,11 @@ async function loadTechnologiesForVlansPage() {
 }
 
 async function loadVLANs() {
-    const status = document.getElementById('statusFilter').value;
     
     const params = new URLSearchParams({
         page: currentPage,
         per_page: perPage
     });
-    if (status) params.append('status', status);
     params.set('search', document.getElementById('searchInput').value.trim());
     params.set('technology', document.getElementById('technologyFilter').value);
     params.set('vendor', document.getElementById('vendorFilter').value);

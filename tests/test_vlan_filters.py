@@ -30,7 +30,7 @@ class VLANFiltersTest(unittest.TestCase):
         self.vendor_id = vendor.id
         db.session.add_all([
             VLAN(vlan_id=100, type='LTE', vendor_id=vendor.id, pair_id='pair', pair_type='service'),
-            VLAN(vlan_id=200, type='LTE_OM', vendor_id=vendor.id, pair_id='pair', pair_type='om', status=StatusType.ASSIGNED),
+            VLAN(vlan_id=200, type='LTE_OM', vendor_id=vendor.id, pair_id='pair', pair_type='om'),
             VLAN(vlan_id=300, type='3G', vendor='Legacy'),
         ])
         db.session.commit()
@@ -39,8 +39,8 @@ class VLANFiltersTest(unittest.TestCase):
         with self.app.test_request_context('/api/vlans', query_string=params):
             return self.route().get_json()
 
-    def test_om_search_and_status_keep_service_row(self):
-        for params in ({'search': '200'}, {'status': 'ASSIGNED'},
+    def test_om_search_keeps_service_row(self):
+        for params in ({'search': '200'},
                        {'search': '200', 'technology': 'LTE', 'vendor': self.vendor_id}):
             result = self.results(params)
             self.assertEqual(result['total'], 1)

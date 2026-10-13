@@ -2,6 +2,12 @@
 from sqlalchemy import inspect, text
 
 
+def remove_legacy_duplicate_ip_scans(engine):
+    # The old table contains only regenerable scan results.
+    with engine.begin() as conn:
+        conn.exec_driver_sql('DROP TABLE IF EXISTS duplicate_ip_scans')
+
+
 def remove_legacy_duplicate_ip_table(engine):
     inspector = inspect(engine)
     if not inspector.has_table('duplicate_IPs'):

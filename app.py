@@ -7,8 +7,12 @@ from gevent.pywsgi import WSGIServer
 from models.models import db, User, IP, VLAN, ActivityLog, Router, Interface, Site, StatusType, Vendor, PasswordState, Technology, Role, Permission
 from config import Config
 from models.models import DuplicateIP
-from duplicate_ip_migration import remove_legacy_duplicate_ip_table
-from vlan_allocation import migrate_vendor_vlan_scope, used_vlan_ids as get_used_vlan_ids, vlan_conflict_ids
+from migrations.duplicate_ip_migration import remove_legacy_duplicate_ip_table, remove_legacy_duplicate_ip_scans
+from migrations.site_migration import remove_legacy_site_columns
+from migrations.vlan_migration import remove_legacy_vlan_status
+from migrations.ip_migration import remove_legacy_ip_vendor
+from migrations.vendor_migration import migrate_vendor_vlan_scope
+from vlan_allocation import used_vlan_ids as get_used_vlan_ids, vlan_conflict_ids
 from datetime import datetime
 import csv
 import math
@@ -230,7 +234,7 @@ def dashboard():
     assigned_ips = IP.query.filter_by(status=StatusType.ASSIGNED).count()
     free_ips = total_ips - assigned_ips
     total_vlans = VLAN.query.count()
-    assigned_vlans = VLAN.query.filter_by(status=StatusType.ASSIGNED).count()
+    assigned_vlans = VLAN.query.filter(db.or_(VLAN.sites_service.any(), VLAN.sites_om.any())).count()
     free_vlans = total_vlans - assigned_vlans
     
     # Stats by technology
@@ -242,7 +246,7 @@ def dashboard():
         ip_count = IP.query.filter_by(type=t.name).count()
         ip_assigned = IP.query.filter_by(type=t.name, status=StatusType.ASSIGNED).count()
         vlan_count = VLAN.query.filter_by(type=t.name).count()
-        vlan_assigned = VLAN.query.filter_by(type=t.name, status=StatusType.ASSIGNED).count()
+        vlan_assigned = VLAN.query.filter_by(type=t.name).filter(db.or_(VLAN.sites_service.any(), VLAN.sites_om.any())).count()
         
         site_stats_by_tech[t.name] = site_count
         ip_stats_by_tech[t.name] = {
@@ -523,7 +527,6 @@ def api_get_vlans():
     per_page = request.args.get('per_page', 50, type=int)
     technology = request.args.get('technology')
     vendor = request.args.get('vendor')
-    status = request.args.get('status')
     search = request.args.get('search', '').strip()
     
     query = VLAN.query
@@ -543,12 +546,6 @@ def api_get_vlans():
             query = query.filter_by(vendor_id=vendor_id)
         except (ValueError, TypeError):
             query = query.filter_by(vendor=vendor)
-    if status:
-        try:
-            status_enum = StatusType[status]
-            query = query.filter_by(status=status_enum)
-        except KeyError:
-            pass
     if search:
         try:
             vlan_id = int(search)
@@ -740,7 +737,6 @@ def api_add_vlan():
                 type=tech_name,
                 vendor_id=vendor_obj.id if vendor_obj else None,
                 vendor=vendor_name,
-                status=StatusType.FREE,
                 pair_id=pair_id if create_pair else None,
                 pair_type='service' if create_pair else None
             )
@@ -758,7 +754,6 @@ def api_add_vlan():
                     type=f"{tech_name}_OM",
                     vendor_id=vendor_obj.id if vendor_obj else None,
                     vendor=vendor_name,
-                    status=StatusType.FREE,
                     pair_id=pair_id,
                     pair_type='om'
                 )
@@ -870,7 +865,7 @@ def api_get_ips():
                 vendor_id = int(vendor)
                 query = query.filter_by(vendor_id=vendor_id)
             except (ValueError, TypeError):
-                query = query.filter_by(vendor=vendor)
+                query = query.filter(IP.vendor_obj.has(Vendor.name == vendor))
         if status:
             try:
                 status_enum = StatusType[status]
@@ -928,17 +923,13 @@ def api_add_ip():
     if not tech_name:
         return jsonify({'error': 'Invalid technology'}), 400
     
-    # Get vendor object if vendor_id is provided
-    vendor_obj = None
-    vendor_name = None
     if vendor_id:
-        vendor_obj = Vendor.query.get(vendor_id)
-        if not vendor_obj:
-            return jsonify({'error': 'Invalid vendor ID'}), 400
-        vendor_name = vendor_obj.name
+        vendor_obj = db.session.get(Vendor, vendor_id)
     else:
-        vendor_name = vendor
-    
+        vendor_obj = Vendor.query.filter_by(name=vendor).first()
+    if not vendor_obj:
+        return jsonify({'error': 'Invalid vendor'}), 400
+
     if add_method == 'subnetting':
         # Handle subnetting calculator - divide base subnet and generate IPs from all subnets (with optional pair creation)
         base_subnet = data.get('base_subnet')
@@ -1087,7 +1078,6 @@ def api_add_ip():
                     subnet_mask=subnet_mask,
                     type=tech_name,
                     vendor_id=vendor_obj.id if vendor_obj else None,
-                    vendor=vendor_name,
                     status=StatusType.FREE,
                     pair_id=pair_id if create_pair else None,
                     pair_type='service' if create_pair else None
@@ -1103,7 +1093,6 @@ def api_add_ip():
                         subnet_mask=om_subnet_mask,
                         type=f"{tech_name}_OM",
                         vendor_id=vendor_obj.id if vendor_obj else None,
-                        vendor=vendor_name,
                         status=StatusType.FREE,
                         pair_id=pair_id,
                         pair_type='om'
@@ -1212,7 +1201,6 @@ def api_add_ip():
                     subnet_mask=subnet_mask,
                     type=tech_name,
                     vendor_id=vendor_obj.id if vendor_obj else None,
-                    vendor=vendor_name,
                     status=StatusType.FREE,
                     pair_id=pair_id if create_pair else None,
                     pair_type='service' if create_pair else None
@@ -1228,7 +1216,6 @@ def api_add_ip():
                         subnet_mask=om_subnet_mask,
                         type=f"{tech_name}_OM",
                         vendor_id=vendor_obj.id if vendor_obj else None,
-                        vendor=vendor_name,
                         status=StatusType.FREE,
                         pair_id=pair_id,
                         pair_type='om'
@@ -1288,7 +1275,6 @@ def api_add_ip():
             subnet_mask=subnet_mask,
             type=tech_name,
             vendor_id=vendor_obj.id if vendor_obj else None,
-            vendor=vendor_name,
             status=StatusType.FREE,
             pair_id=pair_id if create_pair else None,
             pair_type='service' if create_pair else None
@@ -1303,7 +1289,6 @@ def api_add_ip():
                 subnet_mask=subnet_mask,
                 type=f"{tech_name}_OM",
                 vendor_id=vendor_obj.id if vendor_obj else None,
-                vendor=vendor_name,
                 status=StatusType.FREE,
                 pair_id=pair_id,
                 pair_type='om'
@@ -1840,7 +1825,7 @@ def api_add_site():
             # First try to find free service IP with pair (preferred)
             # Use case-insensitive matching for technology type to handle any case variations
             service_ip_query = IP.query.filter(
-                (IP.vendor_id == vendor_id) | (IP.vendor == vendor.name),
+                IP.vendor_id == vendor_id,
                 db.func.lower(IP.type) == tech_name.lower(),
                 IP.status == StatusType.FREE,
                 IP.pair_id.isnot(None),
@@ -1854,7 +1839,7 @@ def api_add_site():
             # If no paired IP found, try to find any free IP (unpaired)
             if not service_ip:
                 unpaired_ip_query = IP.query.filter(
-                    (IP.vendor_id == vendor_id) | (IP.vendor == vendor.name),
+                    IP.vendor_id == vendor_id,
                     db.func.lower(IP.type) == tech_name.lower(),
                     IP.status == StatusType.FREE,
                     db.or_(
@@ -1871,7 +1856,7 @@ def api_add_site():
                 # Debug: Check what IPs exist for this technology and vendor
                 try:
                     all_ips_for_tech = IP.query.filter(
-                        (IP.vendor_id == vendor_id) | (IP.vendor == vendor.name),
+                        IP.vendor_id == vendor_id,
                         db.func.lower(IP.type) == tech_name.lower()
                     ).all()
                     
@@ -1888,7 +1873,7 @@ def api_add_site():
                     
                     # Also check for similar technology names (case-insensitive)
                     similar_techs = IP.query.with_entities(IP.type).filter(
-                        (IP.vendor_id == vendor_id) | (IP.vendor == vendor.name),
+                        IP.vendor_id == vendor_id,
                         IP.type.ilike(f'%{tech_name}%')
                     ).distinct().all()
                     if similar_techs and len(similar_techs) > 0:
@@ -2232,7 +2217,7 @@ def api_bulk_import_sites():
                 for tech_name in tech_names:
                     # Find free service IP (not used in this import or this row)
                     service_ip_query = IP.query.filter(
-                        (IP.vendor_id == vendor.id) | (IP.vendor == vendor.name),
+                        IP.vendor_id == vendor.id,
                         db.func.lower(IP.type) == tech_name.lower(),
                         IP.status == StatusType.FREE,
                         IP.pair_id.isnot(None),
@@ -2246,7 +2231,7 @@ def api_bulk_import_sites():
                     
                     if not service_ip:
                         unpaired_ip_query = IP.query.filter(
-                            (IP.vendor_id == vendor.id) | (IP.vendor == vendor.name),
+                            IP.vendor_id == vendor.id,
                             db.func.lower(IP.type) == tech_name.lower(),
                             IP.status == StatusType.FREE,
                             db.or_(
@@ -2789,9 +2774,8 @@ def api_get_available_ips():
     else:
         ips = IP.query.filter_by(
             type=tech_enum,
-            vendor=vendor,
             status=StatusType.FREE
-        ).all()
+        ).filter(IP.vendor_obj.has(Vendor.name == vendor)).all()
     
     # Sort IPs numerically by gateway
     ips.sort(key=lambda ip: ipaddress.IPv4Address(ip.gateway))
@@ -3462,7 +3446,7 @@ def api_get_stats():
     assigned_ips = IP.query.filter_by(status=StatusType.ASSIGNED).count()
     free_ips = total_ips - assigned_ips
     total_vlans = VLAN.query.count()
-    assigned_vlans = VLAN.query.filter_by(status=StatusType.ASSIGNED).count()
+    assigned_vlans = VLAN.query.filter(db.or_(VLAN.sites_service.any(), VLAN.sites_om.any())).count()
     free_vlans = total_vlans - assigned_vlans
     
     return jsonify({
@@ -3633,9 +3617,10 @@ def init_db():
         remove_legacy_duplicate_ip_table(db.engine)
         db.create_all()
         migrate_vendor_vlan_scope(db.engine)
-        # The old table contains only regenerable scan results.
-        with db.engine.begin() as conn:
-            conn.exec_driver_sql('DROP TABLE IF EXISTS duplicate_ip_scans')
+        remove_legacy_site_columns(db.engine)
+        remove_legacy_vlan_status(db.engine)
+        remove_legacy_ip_vendor(db.engine)
+        remove_legacy_duplicate_ip_scans(db.engine)
         
         # Initialize permissions and roles
         init_permissions()
