@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.exceptions import abort
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from werkzeug.wrappers import Response
 from gevent.pywsgi import WSGIServer
 from models.models import db, User, IP, VLAN, ActivityLog, Router, Interface, Site, StatusType, Vendor, PasswordState, Technology, Role, Permission
 from config import Config
@@ -20,6 +22,10 @@ import json
 
 app = Flask(__name__)
 app.config.from_object(Config)
+if Config.BASE_PATH != '/':
+    app.wsgi_app = DispatcherMiddleware(
+        Response('Not Found', status=404), {Config.BASE_PATH: app.wsgi_app}
+    )
 
 class MessageAnnouncer:
     def __init__(self):

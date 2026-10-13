@@ -121,9 +121,44 @@ in your shell first.
 You can also configure the application using environment variables:
 - `HOST`: Server host (default: `localhost`)
 - `PORT`: Server port (default: `5000`)
+- `BASE_PATH`: URL prefix, such as `/ip-manager` (default: empty, serves at `/`). Restart the app after changing it.
 - `DEBUG`: Debug mode (default: `False`)
 - `SECRET_KEY`: Secret key for sessions
 - `DATABASE_URL`: Database connection string
+
+### Serving under /ip-manager
+
+Set `BASE_PATH=/ip-manager` in `.env` for Compose, or export it before starting
+Python directly. The app then serves pages, static files, and APIs under that
+prefix and generates matching links, redirects, and session cookie paths.
+Changing the prefix may require signing in again.
+
+Add these locations to your existing Nginx server block:
+
+```nginx
+location = /ip-manager {
+    return 301 /ip-manager/$is_args$args;
+}
+
+location /ip-manager/ {
+    # No trailing slash: preserve the prefix for the app's dispatcher.
+    proxy_pass http://127.0.0.1:5000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+}
+```
+
+Remove the previous `sub_filter`, `proxy_cookie_path`, and prefix-adding
+`proxy_redirect` directives. Nginx's location must match `BASE_PATH`; Nginx does
+not automatically read the app's environment variable. With this example,
+the app is also directly accessible at `http://localhost:5000/ip-manager/`.
 
 ### Docker Compose
 
