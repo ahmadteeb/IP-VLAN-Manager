@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 
 from flask import Flask, jsonify, request
+from flask_login import LoginManager
 
 from models.models import db, VLAN, Vendor, Site, Technology, StatusType
 
@@ -10,6 +11,7 @@ from models.models import db, VLAN, Vendor, Site, Technology, StatusType
 class VLANFiltersTest(unittest.TestCase):
     def setUp(self):
         self.app = Flask(__name__)
+        LoginManager(self.app).user_loader(lambda identifier: None)
         self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://'
         db.init_app(self.app)
         context = self.app.app_context()
@@ -21,7 +23,7 @@ class VLANFiltersTest(unittest.TestCase):
         route = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == 'api_get_vlans')
         route.decorator_list = []
         namespace = dict(db=db, VLAN=VLAN, Vendor=Vendor, Site=Site, StatusType=StatusType,
-                         request=request, jsonify=jsonify, parse_technology=lambda value: value)
+                         request=request, jsonify=jsonify, parse_technology=lambda value: value, visible_sites=lambda: Site.query)
         exec(compile(ast.Module(body=[route], type_ignores=[]), 'app.py', 'exec'), namespace)
         self.route = namespace['api_get_vlans']
         vendor = Vendor(name='Acme')

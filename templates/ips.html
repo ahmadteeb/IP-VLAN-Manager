@@ -36,14 +36,20 @@
         </div>
         
         <!-- Filters -->
-        <div class="row mb-3">
+        <div class="row g-3 align-items-end mb-3">
             <div class="col-md-3">
+                <label for="searchInput" class="form-label">Gateway</label>
                 <input type="text" class="form-control" id="searchInput" placeholder="Search gateway...">
             </div>
             <div class="col-md-2">
-                <input type="text" class="form-control" id="vendorFilter" placeholder="Vendor">
+                <label for="vendorFilter" class="form-label">Vendor</label>
+                <select class="form-select" id="vendorFilter" data-search-local="true">
+                    <option value="">All vendors</option>
+                    {% for vendor in filter_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}
+                </select>
             </div>
             <div class="col-md-2">
+                <label for="statusFilter" class="form-label">Status</label>
                 <select class="form-select" id="statusFilter">
                     <option value="">All Status</option>
                     <option value="FREE">Free</option>

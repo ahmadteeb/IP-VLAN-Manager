@@ -102,7 +102,32 @@
             <div class="modal-body">
                 <label for="exportSiteIdsInput" class="form-label">Site IDs</label>
                 <textarea class="form-control" id="exportSiteIdsInput" rows="8" required aria-describedby="exportSiteIdsHelp exportSiteIdsError" placeholder="SITE001&#10;SITE002&#10;SITE003"></textarea>
-                <div class="form-text" id="exportSiteIdsHelp">Paste up to 1,000 IDs separated by lines, commas, spaces, or semicolons. All technology records for each ID are included, across all pages.</div>
+                <div class="form-text" id="exportSiteIdsHelp">Paste up to 1,000 IDs separated by lines, commas, spaces, or semicolons. Export matching records across all pages; leave filters empty to include all vendors and technologies.</div>
+                <div class="row g-3 mt-1">
+                    <div class="col-sm-6">
+                        <label for="exportVendorFilter" class="form-label">Vendor</label>
+                        <select id="exportVendorFilter" class="form-select" data-search-local="true">
+                            <option value="">All vendors</option>
+                            {% for vendor in filter_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-6">
+                        <label id="exportTechnologyLabel" class="form-label">Technologies</label>
+                        <div class="dropdown">
+                            <button type="button" id="exportTechnologyFilter" class="btn btn-outline-secondary dropdown-toggle w-100 text-start" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-labelledby="exportTechnologyLabel exportTechnologyText">
+                                <span id="exportTechnologyText">All technologies</span>
+                            </button>
+                            <div class="dropdown-menu w-100 p-2" style="max-height: 240px; overflow-y: auto;">
+                                {% for technology in filter_technologies %}
+                                <label class="dropdown-item d-flex align-items-center gap-2">
+                                    <input type="checkbox" class="form-check-input m-0" name="exportTechnologies" value="{{ technology.name }}"> {{ technology.name }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="form-text">Select any combination. None selected includes all.</div>
+                    </div>
+                </div>
                 <div class="text-danger mt-2" id="exportSiteIdsError" role="alert"></div>
             </div>
             <div class="modal-footer">
@@ -169,7 +194,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Vendor *</label>
-                        <select class="form-select" id="siteVendor" required>
+                        <select class="form-select" id="siteVendor" required data-site-scope="true">
                             <option value="">Select Vendor</option>
                         </select>
                     </div>

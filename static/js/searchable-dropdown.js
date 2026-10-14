@@ -62,6 +62,11 @@
         customSelect.setAttribute('role', 'combobox');
         customSelect.setAttribute('aria-expanded', 'false');
         customSelect.setAttribute('aria-haspopup', 'listbox');
+        const label = selectElement.labels?.[0]?.textContent.trim();
+        if (label) {
+            customSelect.setAttribute('aria-label', label);
+            searchInput.setAttribute('aria-label', `Search ${label}`);
+        }
 
         const displayText = document.createElement('span');
         displayText.className = 'searchable-dropdown-display';
@@ -98,9 +103,11 @@
         let filteredOptions = [];
         let fetchTimeout = null;
         let isFetching = false;
+        let requestVersion = 0;
 
         // Map select IDs to API endpoints
         function getApiEndpoint(selectId) {
+            if (selectElement.dataset.searchLocal === 'true') return null;
             if (!window.API_URLS) {
                 return null;
             }
@@ -197,15 +204,18 @@
             const dataProperty = getDataPropertyName(selectElement.id);
             const displayField = getDisplayField(selectElement.id);
 
-            if (!apiEndpoint || !dataProperty || isFetching) {
+            if (!apiEndpoint || !dataProperty || (isFetching && selectElement.dataset.searchRemote !== 'true')) {
                 return;
             }
 
             isFetching = true;
+            const version = ++requestVersion;
+            const routerValue = document.getElementById(selectElement.dataset.dependsOn)?.value;
             try {
                 console.log(`[SearchableDropdown] Fetching data from ${apiEndpoint} with search term: "${searchTerm}"`);
 
                 let extraParams = '';
+                if (selectElement.dataset.siteScope === 'true') extraParams += '&site_scope=1';
                 if (selectElement.dataset.dependsOn) {
                     const dependentEl = document.getElementById(selectElement.dataset.dependsOn);
                     if (dependentEl && dependentEl.value) {
@@ -213,7 +223,8 @@
                     }
                 }
 
-                const url = `${apiEndpoint}?search=${encodeURIComponent(searchTerm)}&per_page=100${extraParams}`;
+                const limit = selectElement.dataset.searchRemote === 'true' ? 50 : 100;
+                const url = `${apiEndpoint}?search=${encodeURIComponent(searchTerm)}&per_page=${limit}${extraParams}`;
                 const response = await fetch(url, {
                     headers: {
                         'Content-Type': 'application/json'
@@ -226,6 +237,30 @@
 
                 const data = await response.json();
                 const items = data[dataProperty] || [];
+                if (selectElement.dataset.searchRemote === 'true') {
+                    if (version !== requestVersion || !isOpen || searchInput.value !== searchTerm
+                        || routerValue !== document.getElementById(selectElement.dataset.dependsOn)?.value) return;
+                    const selected = selectElement.selectedOptions[0]?.cloneNode(true);
+                    const placeholder = selectElement.options[0].cloneNode(true);
+                    selectElement.replaceChildren(placeholder);
+                    if (selected?.value) selectElement.appendChild(selected);
+                    items.forEach(item => {
+                        if (String(item.id) === selected?.value) return;
+                        const option = document.createElement('option');
+                        option.value = item.id;
+                        option.textContent = item.router_name ? `${item.name} (${item.router_name})` : item.name;
+                        selectElement.appendChild(option);
+                    });
+                    if (selected?.value) selectElement.value = selected.value;
+                    buildOptions();
+                    if (!items.length || data.total > items.length) {
+                        const message = document.createElement('div');
+                        message.className = 'p-2 text-muted';
+                        message.textContent = items.length ? 'Showing first 50 results. Type to narrow the search.' : 'No results found';
+                        dropdownMenu.appendChild(message);
+                    }
+                    return;
+                }
 
                 console.log(`[SearchableDropdown] Received ${items.length} items from API`);
 
@@ -272,6 +307,9 @@
                     dropdownMenu.innerHTML = '<div class="searchable-dropdown-option" style="padding: 0.5rem 0.75rem; color: #6c757d; text-align: center;">No results found</div>';
                 }
             } catch (error) {
+                if (selectElement.dataset.searchRemote === 'true' && version === requestVersion && isOpen) {
+                    dropdownMenu.textContent = 'Could not load options. Type to retry.';
+                }
                 console.error(`[SearchableDropdown] Error fetching data from API:`, error);
             } finally {
                 isFetching = false;
@@ -279,6 +317,14 @@
         }
 
         function filterOptions(searchTerm) {
+            if (selectElement.dataset.searchRemote === 'true') {
+                ++requestVersion;
+                clearTimeout(fetchTimeout);
+                dropdownMenu.textContent = 'Searching…';
+                fetchTimeout = setTimeout(() => fetchDataFromApi(searchTerm), 300);
+                return;
+            }
+            if (selectElement.dataset.searchLocal === 'true') buildOptions();
             const term = searchTerm.toLowerCase().trim();
             let visibleCount = 0;
 
@@ -293,7 +339,7 @@
             });
 
             // If no visible options and search term is not empty, fetch from API
-            if (visibleCount === 0 && term.length > 0) {
+            if (visibleCount === 0 && term.length > 0 && selectElement.dataset.searchLocal !== 'true') {
                 // Clear existing timeout
                 if (fetchTimeout) {
                     clearTimeout(fetchTimeout);
@@ -317,6 +363,13 @@
                 filteredOptions.forEach(opt => opt.classList.remove('hover'));
                 firstVisible.classList.add('hover');
             } else if (visibleCount === 0 && term.length > 0) {
+                if (selectElement.dataset.searchLocal === 'true') {
+                    const message = document.createElement('div');
+                    message.className = 'p-2 text-muted';
+                    message.textContent = 'No results found';
+                    dropdownMenu.appendChild(message);
+                    return;
+                }
                 // Show loading message while fetching
                 dropdownMenu.innerHTML = '<div class="searchable-dropdown-option" style="padding: 0.5rem 0.75rem; color: #6c757d; text-align: center;">Searching...</div>';
             }
@@ -334,9 +387,11 @@
             buildOptions();
             searchInput.focus();
             searchInput.value = '';
+            if (selectElement.dataset.searchRemote === 'true') fetchDataFromApi('');
         }
 
         function closeDropdown() {
+            ++requestVersion;
             if (!isOpen) return;
             isOpen = false;
             customSelect.setAttribute('aria-expanded', 'false');
@@ -442,7 +497,7 @@
     function initSearchableDropdowns() {
         document.querySelectorAll('select.form-select:not([multiple])').forEach(select => {
             // Skip if it has very few options (like role select with 3 options)
-            if (select.options.length <= 5 && !select.id.includes('Vendor') && !select.id.includes('Router') && !select.id.includes('Interface') && !select.id.includes('Technology')) {
+            if (select.dataset.searchRemote !== 'true' && select.dataset.searchLocal !== 'true' && select.options.length <= 5 && !select.id.includes('Vendor') && !select.id.includes('Router') && !select.id.includes('Interface') && !select.id.includes('Technology')) {
                 return;
             }
             createSearchableDropdown(select);
@@ -464,7 +519,7 @@
             const modal = this._element;
             if (modal) {
                 modal.querySelectorAll('select.form-select:not([multiple])').forEach(select => {
-                    if (select.options.length > 5 || select.id.includes('Vendor') || select.id.includes('Router') || select.id.includes('Interface') || select.id.includes('Technology')) {
+                    if (select.dataset.searchLocal === 'true' || select.options.length > 5 || select.id.includes('Vendor') || select.id.includes('Router') || select.id.includes('Interface') || select.id.includes('Technology')) {
                         if (select.dataset.searchable !== 'true') {
                             createSearchableDropdown(select);
                         }

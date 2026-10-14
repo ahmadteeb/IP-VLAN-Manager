@@ -42,14 +42,14 @@
             </div>
             <div class="col-md-2">
                 <label for="technologyFilter" class="form-label">Technology</label>
-                <select id="technologyFilter" class="form-select">
+                <select id="technologyFilter" class="form-select" data-search-local="true">
                     <option value="">All technologies</option>
                     {% for technology in filter_technologies %}<option value="{{ technology.name }}">{{ technology.name }}</option>{% endfor %}
                 </select>
             </div>
             <div class="col-md-2">
                 <label for="vendorFilter" class="form-label">Vendor</label>
-                <select id="vendorFilter" class="form-select">
+                <select id="vendorFilter" class="form-select" data-search-local="true">
                     <option value="">All vendors</option>
                     {% for vendor in filter_vendors %}<option value="{{ vendor.id }}">{{ vendor.name }}</option>{% endfor %}
                 </select>

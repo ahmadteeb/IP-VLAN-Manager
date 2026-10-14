@@ -101,6 +101,12 @@ function setupEventListeners() {
     }
     const exportIdsForm = document.getElementById('exportSiteIdsForm');
     if (exportIdsForm) exportIdsForm.addEventListener('submit', exportSitesByIds);
+    document.querySelectorAll('input[name="exportTechnologies"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const selected = Array.from(document.querySelectorAll('input[name="exportTechnologies"]:checked'), input => input.value);
+            document.getElementById('exportTechnologyText').textContent = selected.join(', ') || 'All technologies';
+        });
+    });
 
     const generateConfigBtn = document.getElementById('generateConfigBtn');
     if (generateConfigBtn) {
@@ -358,7 +364,11 @@ async function exportSitesByIds(event) {
         const response = await fetch(window.API_URLS.exportSites, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ site_ids: siteIds })
+            body: JSON.stringify({
+                site_ids: siteIds,
+                vendor_id: document.getElementById('exportVendorFilter').value,
+                technologies: Array.from(document.querySelectorAll('input[name="exportTechnologies"]:checked'), input => input.value)
+            })
         });
         if (!response.ok) {
             const data = await response.json();
@@ -544,7 +554,7 @@ function changePage(page) {
 
 async function loadVendorsForSelect() {
     try {
-        const data = await apiRequest(window.API_URLS.vendors);
+        const data = await apiRequest(`${window.API_URLS.vendors}?site_scope=1`);
         const select = document.getElementById('siteVendor');
         select.innerHTML = '<option value="">Select Vendor</option>' +
             data.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');

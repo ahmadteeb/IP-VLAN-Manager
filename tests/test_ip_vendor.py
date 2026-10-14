@@ -4,6 +4,7 @@ from pathlib import Path
 import unittest
 
 from flask import Flask, jsonify, request
+from flask_login import LoginManager
 from sqlalchemy import create_engine, inspect, text
 
 from migrations.ip_migration import remove_legacy_ip_vendor
@@ -48,6 +49,7 @@ class IPVendorMigrationTest(unittest.TestCase):
 class IPVendorAPITest(unittest.TestCase):
     def setUp(self):
         self.app = Flask(__name__)
+        LoginManager(self.app).user_loader(lambda identifier: None)
         self.app.config.update(SQLALCHEMY_DATABASE_URI='sqlite://', TESTING=True)
         db.init_app(self.app)
         context = self.app.app_context()

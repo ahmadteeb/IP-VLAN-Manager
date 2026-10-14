@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function setupEventListeners() {
+    document.getElementById('allSiteVendors').addEventListener('change', updateSiteVendorChoices);
     // Add Role Button
     document.getElementById('addRoleBtn').addEventListener('click', function() {
         editingRoleId = null;
@@ -70,6 +71,7 @@ function renderRolesTable() {
                 <td>${escapeHtml(role.description || 'No description')}</td>
                 <td>
                     <span class="badge bg-info">${permissionCount} permission${permissionCount !== 1 ? 's' : ''}</span>
+                    <div class="small text-muted mt-1">Sites: ${role.site_vendor_ids == null ? 'all vendors' : `${role.site_vendor_ids.length} vendor(s)`}</div>
                 </td>
                 <td>
                     <span class="badge bg-success">${userCount} user${userCount !== 1 ? 's' : ''}</span>
@@ -260,9 +262,14 @@ function checkPermissionDependencies(permCode, permId, skipRecursion = false) {
     }
 }
 
+function updateSiteVendorChoices() {
+    document.getElementById('siteVendorChoices').style.display = document.getElementById('allSiteVendors').checked ? 'none' : 'block';
+}
+
 function resetRoleForm() {
     document.getElementById('roleForm').reset();
     document.getElementById('roleId').value = '';
+    updateSiteVendorChoices();
     // Uncheck all permission checkboxes and hide warnings
     document.querySelectorAll('.permission-checkbox').forEach(cb => {
         cb.checked = false;
@@ -284,6 +291,11 @@ function editRole(roleId) {
     document.getElementById('roleId').value = role.id;
     document.getElementById('roleName').value = role.name;
     document.getElementById('roleDescription').value = role.description || '';
+    document.getElementById('allSiteVendors').checked = role.site_vendor_ids == null;
+    document.querySelectorAll('.site-vendor-checkbox').forEach(checkbox => {
+        checkbox.checked = (role.site_vendor_ids || []).includes(Number(checkbox.value));
+    });
+    updateSiteVendorChoices();
     
     // Check the permissions for this role
     const permissionIds = role.permission_ids || [];
@@ -329,7 +341,9 @@ async function saveRole() {
             body: JSON.stringify({
                 name: name,
                 description: description,
-                permission_ids: selectedPermissions
+                permission_ids: selectedPermissions,
+                site_vendor_ids: document.getElementById('allSiteVendors').checked ? null :
+                    Array.from(document.querySelectorAll('.site-vendor-checkbox:checked'), checkbox => Number(checkbox.value))
             })
         });
         

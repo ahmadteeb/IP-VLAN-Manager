@@ -96,6 +96,7 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False, index=True)
     description = db.Column(db.String(500))
+    site_vendor_ids = db.Column(db.JSON, nullable=True)  # null means all vendors; [] means no sites.
     is_system = db.Column(Boolean, default=False, nullable=False)  # System roles cannot be deleted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -112,6 +113,7 @@ class Role(db.Model):
             'name': self.name,
             'description': self.description,
             'is_system': self.is_system,
+            'site_vendor_ids': self.site_vendor_ids,
             'permissions': [p.to_dict() for p in self.permissions],
             'permission_ids': [p.id for p in self.permissions],
             'user_count': len(self.users) if self.users else 0,
@@ -295,9 +297,9 @@ class IP(db.Model):
     def to_dict(self):
         """Convert IP to dictionary"""
         # Get the site that uses this IP (if any)
-        site_service = self.sites_service[0] if self.sites_service else None
-        site_om = self.sites_om[0] if self.sites_om else None
-        site = site_service or site_om
+        from site_access import site_is_visible
+        site = next((candidate for candidate in self.sites_service + self.sites_om
+                     if site_is_visible(candidate)), None)
         
         # Find pair IP if exists
         pair_ip = None
@@ -348,9 +350,9 @@ class VLAN(db.Model):
     def to_dict(self):
         """Convert VLAN to dictionary"""
         # Get the site that uses this VLAN (if any)
-        site_service = self.sites_service[0] if self.sites_service else None
-        site_om = self.sites_om[0] if self.sites_om else None
-        site = site_service or site_om
+        from site_access import site_is_visible
+        site = next((candidate for candidate in self.sites_service + self.sites_om
+                     if site_is_visible(candidate)), None)
         
         # Find pair VLAN if exists
         pair_vlan = None

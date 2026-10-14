@@ -457,6 +457,20 @@ IP-VLAN Manager/
 - Cannot create, edit, or delete any entities
 - Ideal for monitoring and reporting purposes
 
+### Site visibility by vendor
+
+In Roles, edit a role and configure **Site visibility by vendor**. Choose
+**All vendors**, or uncheck it and select the vendors whose sites the role may
+access. Selecting no vendors hides all sites. Existing roles retain access to
+all vendors until restricted; the Admin role remains unrestricted.
+
+The scope applies to site lists, exports, configuration generation, dashboard
+site counts, site actions, and site names shown on IP/VLAN records. It also
+limits vendors available when creating or importing sites. Existing action
+permissions still apply, and the setting affects every user assigned to the role.
+Global IP/VLAN allocation conflict checks continue to consider all sites.
+The schema update runs automatically at app startup.
+
 ## 🔄 Services
 
 ### Update Routers Service

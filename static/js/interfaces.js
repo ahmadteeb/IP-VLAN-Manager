@@ -22,7 +22,6 @@ function resetSelectById(id) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    loadRouters();
     loadInterfaces();
     setupEventListeners();
 });
@@ -46,11 +45,17 @@ function setupEventListeners() {
         updateSelectAllCheckbox();
         loadInterfaces();
     }
-    document.getElementById('routerFilter').addEventListener('change', applyFilters);
+    document.getElementById('routerFilter').addEventListener('change', function() {
+        const select = document.getElementById('interfaceFilter');
+        select.innerHTML = '<option value="">All interfaces</option>';
+        resetSelectById('interfaceFilter');
+    });
+    document.getElementById('interfaceFilter').addEventListener('change', applyFilters);
     document.getElementById('searchInput').addEventListener('input', debounce(applyFilters, 300));
     document.getElementById('clearFiltersBtn').addEventListener('click', function() {
         document.getElementById('searchInput').value = '';
         resetSelectById('routerFilter');
+        resetSelectById('interfaceFilter');
     });
     
     // Delete selected button
@@ -83,17 +88,6 @@ function setupEventListeners() {
     }
 }
 
-async function loadRouters() {
-    try {
-        const data = await apiRequest(window.API_URLS.routers);
-        const filterSelect = document.getElementById('routerFilter');
-        filterSelect.innerHTML = '<option value="">All Routers</option>' + 
-            data.routers.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-    } catch (error) {
-        showToast('Error', error.message, 'error');
-    }
-}
-
 async function loadRoutersForSelect() {
     try {
         const data = await apiRequest(window.API_URLS.routers);
@@ -112,12 +106,14 @@ async function loadRoutersForSelect() {
 async function loadInterfaces() {
     const requestId = ++interfacesRequestId;
     const routerId = document.getElementById('routerFilter').value;
+    const interfaceId = document.getElementById('interfaceFilter').value;
     const search = document.getElementById('searchInput').value.trim();
     const params = new URLSearchParams({
         page: currentPage,
         per_page: perPage
     });
     if (routerId) params.append('router_id', routerId);
+    if (interfaceId) params.append('interface_id', interfaceId);
     if (search) params.append('search', search);
     
     try {

@@ -147,10 +147,11 @@ function setupEventListeners() {
         loadIPs();
     }, 500));
     
-    document.getElementById('vendorFilter').addEventListener('input', debounce(function() {
+    document.getElementById('vendorFilter').addEventListener('change', function() {
         currentPage = 1;
+        selectedIpIds.clear();
         loadIPs();
-    }, 500));
+    });
     
     document.getElementById('statusFilter').addEventListener('change', function() {
         currentPage = 1;
@@ -159,7 +160,7 @@ function setupEventListeners() {
     
     document.getElementById('clearFilters').addEventListener('click', function() {
         document.getElementById('searchInput').value = '';
-        document.getElementById('vendorFilter').value = '';
+        resetSelectById('vendorFilter');
         document.getElementById('statusFilter').value = '';
         currentPage = 1;
         loadIPs();

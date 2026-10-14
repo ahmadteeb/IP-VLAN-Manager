@@ -12,6 +12,8 @@ from migrations.site_migration import remove_legacy_site_columns
 from migrations.vlan_migration import remove_legacy_vlan_status
 from migrations.ip_migration import remove_legacy_ip_vendor
 from migrations.vendor_migration import migrate_vendor_vlan_scope
+from migrations.role_migration import migrate_role_site_vendors
+from site_access import visible_sites, visible_site_vendors, validate_site_vendor_ids
 from vlan_allocation import used_vlan_ids as get_used_vlan_ids, vlan_conflict_ids
 from datetime import datetime
 import csv
@@ -20,6 +22,7 @@ from functools import wraps
 import ipaddress
 import io
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 import gevent.queue as queue
 import json
@@ -229,7 +232,7 @@ def dashboard():
     # Get statistics
     total_routers = Router.query.count()
     total_interfaces = Interface.query.count()
-    total_sites = Site.query.count()
+    total_sites = visible_sites().count()
     total_ips = IP.query.count()
     assigned_ips = IP.query.filter_by(status=StatusType.ASSIGNED).count()
     free_ips = total_ips - assigned_ips
@@ -242,7 +245,7 @@ def dashboard():
     ip_stats_by_tech = {}
     vlan_stats_by_tech = {}
     for t in Technology.query.all():
-        site_count = Site.query.filter_by(technology_type=t.name).count()
+        site_count = visible_sites().filter_by(technology_type=t.name).count()
         ip_count = IP.query.filter_by(type=t.name).count()
         ip_assigned = IP.query.filter_by(type=t.name, status=StatusType.ASSIGNED).count()
         vlan_count = VLAN.query.filter_by(type=t.name).count()
@@ -432,12 +435,15 @@ def api_get_interfaces():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 50, type=int)
     router_id = request.args.get('router_id', type=int)
+    interface_id = request.args.get('interface_id', type=int)
     search = request.args.get('search', "", type=str)
     
-    query = Interface.query
+    query = Interface.query.options(joinedload(Interface.router))
     
     if router_id:
         query = query.filter_by(router_id=router_id)
+    if interface_id:
+        query = query.filter_by(id=interface_id)
     
     if search:
         query = query.filter(db.or_(
@@ -552,10 +558,10 @@ def api_get_vlans():
             query = query.filter(VLAN.vlan_id == vlan_id)
         except ValueError:
             # Search by site name or vendor through relationship (left join to include VLANs without sites)
-            query = query.outerjoin(Site, db.or_(
+            query = query.outerjoin(Site, db.and_(db.or_(
                 VLAN.id == Site.service_vlan_id,
                 VLAN.id == Site.om_vlan_id
-            )).filter(
+            ), Site.id.in_(visible_sites().with_entities(Site.id)))).filter(
                 db.or_(
                     Site.site_name.contains(search, autoescape=True),
                     Site.site_id.contains(search, autoescape=True),
@@ -812,7 +818,7 @@ def api_delete_vlan(vlan_id):
 @login_required
 @permission_required('ips.view')
 def ips():
-    return render_template('ips.html')
+    return render_template('ips.html', filter_vendors=Vendor.query.order_by(Vendor.name).all())
 
 @app.route('/duplicated-ip')
 @login_required
@@ -1459,7 +1465,7 @@ def api_get_vendors():
     per_page = request.args.get('per_page', 50, type=int)
     search = request.args.get('search', "", type=str)
     
-    query = Vendor.query.order_by(Vendor.name)
+    query = (visible_site_vendors() if request.args.get('site_scope') == '1' else Vendor.query).order_by(Vendor.name)
     if search:
         query = query.filter(Vendor.name.like(f'%{search}%'))
     
@@ -1627,7 +1633,8 @@ def build_site_config_blocks(site: Site) -> list[str]:
 @login_required
 @permission_required('sites.view')
 def sites():
-    return render_template('sites.html')
+    return render_template('sites.html', filter_vendors=visible_site_vendors().order_by(Vendor.name).all(),
+                           filter_technologies=Technology.query.order_by(Technology.name).all())
 
 @app.route('/api/sites', methods=['GET'])
 @login_required
@@ -1640,7 +1647,7 @@ def api_get_sites():
     vendor = request.args.get('vendor')
     search = request.args.get('search', '')
     
-    query = Site.query
+    query = visible_sites()
     
     if technology:
         tech_name = parse_technology(technology)
@@ -1694,7 +1701,7 @@ def api_generate_site_configs():
             app.logger.warning('Invalid site_ids payload for config generation: %s', str(e))
             return jsonify({'error': 'site_ids must contain valid integers'}), 400
 
-        sites = Site.query.filter(Site.id.in_(normalized_site_ids)).all()
+        sites = visible_sites().filter(Site.id.in_(normalized_site_ids)).all()
         found_ids = {s.id for s in sites}
         missing_ids = [sid for sid in normalized_site_ids if sid not in found_ids]
 
@@ -1776,7 +1783,7 @@ def api_add_site():
         
         # Get vendor
         try:
-            vendor = Vendor.query.get_or_404(vendor_id)
+            vendor = visible_site_vendors().filter_by(id=vendor_id).first_or_404()
         except Exception as e:
             app.logger.error(f'Error fetching vendor {vendor_id}: {str(e)}', exc_info=True)
             return jsonify({'error': f'Vendor not found: {vendor_id}'}), 404
@@ -2167,7 +2174,7 @@ def api_bulk_import_sites():
                     continue
                 
                 # Get vendor
-                vendor = Vendor.query.filter_by(name=vendor_name).first()
+                vendor = visible_site_vendors().filter_by(name=vendor_name).first()
                 if not vendor:
                     errors.append(f'Row {row_num}: Vendor "{vendor_name}" not found')
                     continue
@@ -2453,7 +2460,7 @@ def api_bulk_import_sites():
 @permission_required('sites.release')
 def api_release_site(site_id):
     """Release a single site (free up IPs, but VLANs can be reused)"""
-    site = Site.query.get_or_404(site_id)
+    site = visible_sites().filter_by(id=site_id).first_or_404()
     
     # Free up IPs (both service and OM if using pairs)
     if site.service_ip_id:
@@ -2492,7 +2499,7 @@ def api_release_sites():
         return jsonify({'error': 'At least one site ID is required'}), 400
     
     # Get all sites to release
-    sites = Site.query.filter(Site.id.in_(site_ids)).all()
+    sites = visible_sites().filter(Site.id.in_(site_ids)).all()
     
     if len(sites) != len(site_ids):
         return jsonify({'error': 'One or more site IDs are invalid'}), 400
@@ -2548,7 +2555,7 @@ def api_transfer_sites_check():
     Interface.query.get_or_404(interface_id)
     
     # Get all sites to transfer
-    sites = Site.query.filter(Site.id.in_(site_ids)).all()
+    sites = visible_sites().filter(Site.id.in_(site_ids)).all()
     
     if len(sites) != len(site_ids):
         return jsonify({'error': 'One or more site IDs are invalid'}), 400
@@ -2614,7 +2621,7 @@ def api_transfer_sites():
         return jsonify({'error': 'Interface does not belong to the selected router'}), 400
     
     # Get all sites to transfer
-    sites = Site.query.filter(Site.id.in_(site_ids)).all()
+    sites = visible_sites().filter(Site.id.in_(site_ids)).all()
     
     if len(sites) != len(site_ids):
         return jsonify({'error': 'One or more site IDs are invalid'}), 400
@@ -2856,8 +2863,8 @@ def api_get_available_vlans():
 @permission_required('sites.update')
 def api_edit_site(site_id):
     """Edit site attributes (Site Name, Site ID, VLANs)"""
+    site = visible_sites().filter_by(id=site_id).first_or_404()
     try:
-        site = Site.query.get_or_404(site_id)
         data = request.json
         
         new_site_id = data.get('site_id')
@@ -3102,7 +3109,7 @@ def api_delete_user(user_id):
 @permission_required('roles.manage')
 def roles():
     """Role management page"""
-    return render_template('roles.html')
+    return render_template('roles.html', site_vendors=Vendor.query.order_by(Vendor.name).all())
 
 @app.route('/api/roles', methods=['GET'])
 @login_required
@@ -3164,7 +3171,11 @@ def api_add_role():
         if len(permissions) != len(permission_ids):
             return jsonify({'error': 'One or more permission IDs are invalid'}), 400
         
-        role = Role(name=name, description=description, is_system=False)
+        try:
+            site_vendor_ids = validate_site_vendor_ids(data.get('site_vendor_ids'))
+        except ValueError as error:
+            return jsonify({'error': str(error)}), 400
+        role = Role(name=name, description=description, is_system=False, site_vendor_ids=site_vendor_ids)
         role.permissions = permissions
         db.session.add(role)
         db.session.commit()
@@ -3214,6 +3225,11 @@ def api_update_role(role_id):
         if len(permissions) != len(permission_ids):
             return jsonify({'error': 'One or more permission IDs are invalid'}), 400
         
+        try:
+            site_vendor_ids = validate_site_vendor_ids(data.get('site_vendor_ids', role.site_vendor_ids))
+        except ValueError as error:
+            return jsonify({'error': str(error)}), 400
+        role.site_vendor_ids = site_vendor_ids
         role.name = name
         role.description = description
         role.permissions = permissions
@@ -3389,14 +3405,36 @@ def api_export_sites():
                        for value in site_ids)):
             return jsonify({'error': 'Provide 1–1,000 site IDs, each up to 100 characters.'}), 400
         site_ids = list(dict.fromkeys(value.strip() for value in site_ids))
-        sites = Site.query.filter(Site.site_id.in_(site_ids)).order_by(Site.site_id, Site.id).all()
+        sites = visible_sites().filter(Site.site_id.in_(site_ids)).order_by(Site.site_id, Site.id).all()
         found = {site.site_id for site in sites}
         missing = [value for value in site_ids if value not in found]
         if missing:
             return jsonify({'error': 'Some site IDs were not found. Correct the list and try again.',
                             'missing_site_ids': missing}), 400
+        vendor_id = data.get('vendor_id')
+        technology = data.get('technology')
+        technologies = data.get('technologies', [])
+        if (not isinstance(technologies, list) or len(technologies) > 100
+                or any(not isinstance(value, str) or not value or len(value) > 100 for value in technologies)):
+            return jsonify({'error': 'Invalid technology filters.'}), 400
+        if vendor_id not in (None, ''):
+            if not isinstance(vendor_id, (str, int)) or isinstance(vendor_id, bool):
+                return jsonify({'error': 'Invalid vendor filter.'}), 400
+            try:
+                vendor_id = int(vendor_id)
+            except ValueError:
+                return jsonify({'error': 'Invalid vendor filter.'}), 400
+            sites = [site for site in sites if site.vendor_id == vendor_id]
+        if technology not in (None, ''):
+            if not isinstance(technology, str):
+                return jsonify({'error': 'Invalid technology filter.'}), 400
+            sites = [site for site in sites if site.technology_type == technology]
+        if technologies:
+            sites = [site for site in sites if site.technology_type in technologies]
+        if not sites:
+            return jsonify({'error': 'No sites match the selected vendor and technology filters.'}), 400
     else:
-        sites = Site.query.all()
+        sites = visible_sites().all()
     
     output = io.StringIO()
     writer = csv.writer(output)
@@ -3456,7 +3494,7 @@ def api_get_stats():
     """Get dashboard statistics"""
     total_routers = Router.query.count()
     total_interfaces = Interface.query.count()
-    total_sites = Site.query.count()
+    total_sites = visible_sites().count()
     total_ips = IP.query.count()
     assigned_ips = IP.query.filter_by(status=StatusType.ASSIGNED).count()
     free_ips = total_ips - assigned_ips
@@ -3632,6 +3670,7 @@ def init_db():
         remove_legacy_duplicate_ip_table(db.engine)
         db.create_all()
         migrate_vendor_vlan_scope(db.engine)
+        migrate_role_site_vendors(db.engine)
         remove_legacy_site_columns(db.engine)
         remove_legacy_vlan_status(db.engine)
         remove_legacy_ip_vendor(db.engine)

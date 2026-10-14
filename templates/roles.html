@@ -69,6 +69,22 @@
                         </div>
                         <small class="text-muted">Select the permissions this role should have</small>
                     </div>
+                    <fieldset class="mb-3">
+                        <legend class="form-label">Site visibility by vendor</legend>
+                        <label class="form-check mb-2">
+                            <input type="checkbox" class="form-check-input" id="allSiteVendors" checked>
+                            <span class="form-check-label">All vendors</span>
+                        </label>
+                        <div id="siteVendorChoices" class="border rounded p-3" style="display: none; max-height: 200px; overflow-y: auto;">
+                            {% for vendor in site_vendors %}
+                            <label class="form-check">
+                                <input type="checkbox" class="form-check-input site-vendor-checkbox" value="{{ vendor.id }}">
+                                <span class="form-check-label">{{ vendor.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div class="form-text">Choose All vendors or select allowed vendors. No selected vendors means no sites are visible. Site action permissions still apply.</div>
+                    </fieldset>
                 </form>
             </div>
             <div class="modal-footer">
