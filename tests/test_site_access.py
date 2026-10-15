@@ -136,6 +136,9 @@ class SiteAccessTest(unittest.TestCase):
         content.seek(0)
         response = self.client.post('/api_bulk_import_sites', data={'file': (content, 'sites.xlsx')})
         self.assertEqual(response.status_code, 400, response.json)
+        self.assertEqual(response.json['error_count'], 1)
+        self.assertIn('Row 2:', response.json['errors'][0])
+        self.assertIn('Vendor', response.json['errors'][0])
         self.assertIsNone(Site.query.filter_by(site_id='B2').first())
 
     def test_scope_never_grants_action_permissions(self):

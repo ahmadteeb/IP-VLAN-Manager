@@ -2367,7 +2367,8 @@ def api_bulk_import_sites():
         
         # If there are any validation errors, return early without inserting anything
         if errors:
-            app.logger.warning(f'Bulk import validation failed with {len(errors)} error(s). No sites will be inserted.')
+            app.logger.warning('Bulk import validation failed with %d error(s). No sites will be inserted. Details: %r',
+                               len(errors), errors[:100])
             return jsonify({
                 'error': 'Validation failed. Please fix the errors and try again.',
                 'errors': errors[:100],  # Limit to first 100 errors

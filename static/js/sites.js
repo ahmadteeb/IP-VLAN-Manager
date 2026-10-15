@@ -920,6 +920,7 @@ async function bulkImportSites() {
     const originalText = confirmBtn.innerHTML;
     confirmBtn.disabled = true;
     confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" style="width: 0.75rem; height: 0.75rem; border-width: 0.1em;"></span>Importing...';
+    document.getElementById('bulkImportResults').style.display = 'none';
 
     try {
         const response = await fetch(window.API_URLS.sitesBulkImport, {
@@ -930,7 +931,17 @@ async function bulkImportSites() {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || 'Import failed');
+            const results = document.getElementById('bulkImportResults');
+            const message = data.error || 'Import failed';
+            document.getElementById('bulkImportMessage').innerHTML = `<div class="alert alert-danger">${escapeHtml(message)}</div>`;
+            const errors = Array.isArray(data.errors) ? data.errors : [];
+            document.getElementById('bulkImportErrors').innerHTML = errors.length
+                ? `<h6>Fix these spreadsheet rows:</h6><ul class="list-group">${errors.map(error => `<li class="list-group-item list-group-item-danger">${escapeHtml(error)}</li>`).join('')}</ul>`
+                : '';
+            results.style.display = 'block';
+            results.focus();
+            showToast('Error', message, 'error');
+            return;
         }
 
         // Show results
