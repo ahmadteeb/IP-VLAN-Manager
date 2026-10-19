@@ -140,6 +140,32 @@
 {% endif %}
 
 <!-- Generated Config Modal -->
+<div class="modal fade" id="clockConfigModal" tabindex="-1" aria-labelledby="clockConfigTitle" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="clockConfigTitle">Include interface clock configuration?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cancel configuration generation"></button>
+            </div>
+            <div class="modal-body">
+                <p>Select the interfaces to configure. Each interface is included once, even when shared by several sites.</p>
+                <fieldset>
+                    <legend class="form-label">Router / interface</legend>
+                    <div id="clockInterfaceChoices" style="max-height: 240px; overflow-y: auto;"></div>
+                </fieldset>
+                <pre class="border rounded p-2 mt-3 mb-0">interface &lt;interface&gt;
+ clock syncronization enable
+ ptp enable
+#</pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="skipClockConfig">Skip clock</button>
+                <button type="button" class="btn btn-primary" id="includeClockConfig">Include clock</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="configModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">

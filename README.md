@@ -471,6 +471,16 @@ permissions still apply, and the setting affects every user assigned to the role
 Global IP/VLAN allocation conflict checks continue to consider all sites.
 The schema update runs automatically at app startup.
 
+### Optional interface clock configuration
+
+Generate Configuration asks which interfaces should include clock setup. Select
+one or more interfaces, or choose Skip clock. Clock blocks appear once per
+physical interface, before the site configuration. Interfaces are labeled by
+router so matching interface names on different routers remain distinct.
+Successful transfers open the same flow using the destination interface when
+the user has the Generate Configuration permission. The generated text is a
+preview; no commands are sent to routers.
+
 ## 🔄 Services
 
 ### Update Routers Service

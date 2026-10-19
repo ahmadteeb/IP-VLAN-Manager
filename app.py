@@ -1546,7 +1546,7 @@ def generate_site_config_block(site_id: str, site_name: str, gateway: str, subne
     relay_gateway = None
     if technology in ["OM", "4G_OM", "3G_OM", "2G_OM"]:
         vpn_instance = "LTE_OM"
-        relay_gateway = "10.119.119.9" if vendor == "Nokia" else "10.119.10.4"
+        relay_gateway = "10.119.219.19" if vendor == "Nokia" else "10.119.10.4"
     elif technology in ["5G", "4G"]:
         vpn_instance = "LTE"
     elif technology in ["2G"]:
@@ -1732,10 +1732,21 @@ def api_generate_site_configs():
                 })
 
         combined_config = "\n\n".join(cfg['config'] for cfg in configs)
+        interfaces = {}
+        for site in sites:
+            interface = site.interface
+            if interface and interface.id not in interfaces:
+                interfaces[interface.id] = {
+                    'id': interface.id,
+                    'name': interface.name,
+                    'router_name': interface.router.name if interface.router else '',
+                    'clock_config': f'interface {interface.name}\n clock syncronization enable\n ptp enable\n#'
+                }
 
         return jsonify({
             'configs': configs,
-            'combined_config': combined_config
+            'combined_config': combined_config,
+            'interfaces': list(interfaces.values())
         }), 200
     except ValueError as ve:
         app.logger.warning('Config generation validation error: %s', str(ve))

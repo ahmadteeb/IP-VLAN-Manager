@@ -110,7 +110,7 @@ function setupEventListeners() {
 
     const generateConfigBtn = document.getElementById('generateConfigBtn');
     if (generateConfigBtn) {
-        generateConfigBtn.addEventListener('click', generateConfigForSelectedSites);
+        generateConfigBtn.addEventListener('click', () => generateConfigForSelectedSites());
     }
 
     const copyConfigBtn = document.getElementById('copyConfigBtn');
@@ -426,23 +426,64 @@ function exportSelectedSites() {
     exportToCsv(`sites_export_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}`, headers, rows);
 }
 
-async function generateConfigForSelectedSites() {
-    const selectedIds = getSelectedSiteIds();
+function chooseClockInterfaces(interfaces) {
+    if (!interfaces.length) return Promise.resolve([]);
+    const element = document.getElementById('clockConfigModal');
+    const choices = document.getElementById('clockInterfaceChoices');
+    const include = document.getElementById('includeClockConfig');
+    const skip = document.getElementById('skipClockConfig');
+    choices.innerHTML = interfaces.map(iface => `
+        <label class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" value="${iface.id}" ${interfaces.length === 1 ? 'checked' : ''}>
+            <span class="form-check-label">${escapeHtml(iface.router_name)} / ${escapeHtml(iface.name)}</span>
+        </label>`).join('');
+    const selected = () => new Set(Array.from(choices.querySelectorAll('input:checked'), input => Number(input.value)));
+    const update = () => { include.disabled = selected().size === 0; };
+    choices.onchange = update;
+    update();
+    const modal = bootstrap.Modal.getOrCreateInstance(element);
+    return new Promise(resolve => {
+        let result = null;
+        include.onclick = () => {
+            const ids = selected();
+            if (!ids.size) return;
+            result = interfaces.filter(iface => ids.has(iface.id));
+            modal.hide();
+        };
+        skip.onclick = () => { result = []; modal.hide(); };
+        element.addEventListener('hidden.bs.modal', () => {
+            include.onclick = null;
+            skip.onclick = null;
+            choices.onchange = null;
+            resolve(result);
+        }, { once: true });
+        modal.show();
+    });
+}
+
+async function generateConfigForSelectedSites(selectedIds = getSelectedSiteIds()) {
     if (selectedIds.length === 0) {
         showToast('Warning', 'Please select at least one site to generate configuration', 'warning');
         return;
     }
 
+    const generateButton = document.getElementById('generateConfigBtn');
+    if (generateButton) generateButton.disabled = true;
     try {
         const data = await apiRequest(window.API_URLS.sitesConfig, {
             method: 'POST',
             body: JSON.stringify({ site_ids: selectedIds })
         });
 
-        const configText = data.combined_config || (data.configs || []).map(c => c.config).join('\n\n');
+        let configText = data.combined_config || (data.configs || []).map(c => c.config).join('\n\n');
         if (!configText) {
             showToast('Error', 'No configuration could be generated for the selected sites', 'error');
             return;
+        }
+        const clockInterfaces = await chooseClockInterfaces(data.interfaces || []);
+        if (clockInterfaces === null) return;
+        if (clockInterfaces.length) {
+            configText = clockInterfaces.map(iface => iface.clock_config).join('\n\n') + '\n\n' + configText;
         }
 
         const container = document.getElementById('generatedConfigContent');
@@ -457,6 +498,8 @@ async function generateConfigForSelectedSites() {
         }
     } catch (error) {
         showToast('Error', error.message, 'error');
+    } finally {
+        if (generateButton) generateButton.disabled = false;
     }
 }
 
@@ -796,7 +839,11 @@ async function transferSites() {
         });
 
         showToast('Success', `Successfully transferred ${data.count} site(s)`, 'success');
-        bootstrap.Modal.getInstance(document.getElementById('transferSitesModal')).hide();
+        const transferModal = document.getElementById('transferSitesModal');
+        if (document.getElementById('generateConfigBtn')) {
+            transferModal.addEventListener('hidden.bs.modal', () => generateConfigForSelectedSites(selectedIds), { once: true });
+        }
+        bootstrap.Modal.getInstance(transferModal).hide();
         selectedSiteIds.clear();
         updateTransferButton();
         loadSites();

@@ -59,6 +59,7 @@ class SiteAccessTest(unittest.TestCase):
                          login_required=login_required, wraps=wraps, abort=abort, csv=csv, io=io,
                          datetime=datetime, IntegrityError=IntegrityError,
                          parse_technology=lambda value: value, emit_progress=lambda *args: None,
+                         build_site_config_blocks=lambda site: [f'config {site.site_id}'],
                          log_activity=lambda *args, **kwargs: None)
         names = ['permission_required', 'api_get_sites', 'api_export_sites', 'api_generate_site_configs',
                  'api_release_site', 'api_release_sites', 'api_transfer_sites_check', 'api_transfer_sites',
@@ -140,6 +141,28 @@ class SiteAccessTest(unittest.TestCase):
         self.assertIn('Row 2:', response.json['errors'][0])
         self.assertIn('Vendor', response.json['errors'][0])
         self.assertIsNone(Site.query.filter_by(site_id='B2').first())
+
+    def test_config_interfaces_are_unique_per_physical_interface(self):
+        self.visible.interface_id = self.interface.id
+        other_router = Router(name='Other router', router_ip='10.0.0.2', router_type='Test')
+        db.session.add(other_router)
+        db.session.flush()
+        other_interface = Interface(name='p1', router_id=other_router.id)
+        db.session.add(other_interface)
+        db.session.flush()
+        shared = Site(site_id='A2', site_name='Shared', vendor_id=self.a.id, interface_id=self.interface.id)
+        different = Site(site_id='A3', site_name='Different', vendor_id=self.a.id, interface_id=other_interface.id)
+        db.session.add_all([shared, different])
+        db.session.commit()
+        response = self.client.post('/api_generate_site_configs', json={
+            'site_ids': [self.visible.id, shared.id, different.id, shared.id]})
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertEqual(len(response.json['configs']), 3)
+        interfaces = response.json['interfaces']
+        self.assertEqual({entry['id'] for entry in interfaces}, {self.interface.id, other_interface.id})
+        self.assertEqual(len(interfaces), 2)
+        self.assertEqual({entry['router_name'] for entry in interfaces}, {'Router', 'Other router'})
+        self.assertEqual(interfaces[0]['clock_config'], 'interface p1\n clock syncronization enable\n ptp enable\n#')
 
     def test_scope_never_grants_action_permissions(self):
         self.role.permissions = []
