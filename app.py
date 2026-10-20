@@ -1740,7 +1740,7 @@ def api_generate_site_configs():
                     'id': interface.id,
                     'name': interface.name,
                     'router_name': interface.router.name if interface.router else '',
-                    'clock_config': f'interface {interface.name}\n clock syncronization enable\n ptp enable\n#'
+                    'clock_config': f'interface {interface.name}\n clock synchronization enable\n ptp enable\n#'
                 }
 
         return jsonify({

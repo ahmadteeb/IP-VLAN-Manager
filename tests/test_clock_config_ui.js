@@ -37,7 +37,7 @@ test('clock prompt supports multiple selections, skipping, and cancelling', asyn
 
 test('generation includes only chosen clock blocks and keeps regular configuration', async () => {
     let shown = 0;
-    const iface = { id: 7, clock_config: 'interface p1\n clock syncronization enable\n ptp enable\n#' };
+    const iface = { id: 7, clock_config: 'interface p1\n clock synchronization enable\n ptp enable\n#' };
     const elements = { generateConfigBtn: {}, generatedConfigContent: {}, configModal: {} };
     const context = {
         document: { getElementById: id => elements[id] },

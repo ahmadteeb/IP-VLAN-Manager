@@ -162,7 +162,7 @@ class SiteAccessTest(unittest.TestCase):
         self.assertEqual({entry['id'] for entry in interfaces}, {self.interface.id, other_interface.id})
         self.assertEqual(len(interfaces), 2)
         self.assertEqual({entry['router_name'] for entry in interfaces}, {'Router', 'Other router'})
-        self.assertEqual(interfaces[0]['clock_config'], 'interface p1\n clock syncronization enable\n ptp enable\n#')
+        self.assertEqual(interfaces[0]['clock_config'], 'interface p1\n clock synchronization enable\n ptp enable\n#')
 
     def test_scope_never_grants_action_permissions(self):
         self.role.permissions = []
